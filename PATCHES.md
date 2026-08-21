@@ -1,6 +1,6 @@
 # ProScience fork — academic-research-skills
 
-**Версия форка:** 4.2.1
+**Версия форка:** 4.2.2
 **База:** upstream `v3.21.0` (Cheng-I Wu, CC-BY-NC-4.0, лицензия и авторство сохранены)
 **Апстрим:** https://github.com/Imbad0202/academic-research-skills
 
@@ -30,6 +30,7 @@ git rebase v3.22.0 ps          # подставить новый тег
 | `academic-paper/agents/draft_writer_agent.md` | жёсткое style+venue enforcement с self-fetch fallback |
 | `shared/style_calibration_protocol.md` | приоритет локальных жанровых профилей стиля |
 | `commands/ars-destyle.md` | слэш-команда дестилизации |
+| `academic-pipeline/SKILL.md` Stage 5 | сборка .docx через pandoc с шаблоном `~/.claude/ars-docx/reference_<id>.docx` (журнал или ГОСТ); самодельная сборка .docx запрещена |
 | `agents/*.md` | три plugin-агента переименованы без подчёркиваний (требование валидатора установки) |
 | `hooks/hooks.json` | SessionStart-баннер снят: он печатал ~2,1 КБ в КАЖДУЮ сессию любого проекта. PreToolUse write-scope guard оставлен |
 

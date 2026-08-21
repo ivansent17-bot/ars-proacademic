@@ -1,6 +1,6 @@
 {
   "name": "academic-research-skills",
-  "version": "4.2.1",
+  "version": "4.2.2",
   "description": "Academic research pipeline (research → write → review → revise → finalize), fork ProScience. Base: upstream v3.21.0 (Cheng-I Wu, CC-BY-NC-4.0). Local overlay: Stage 4.6 VENUE gate, Stage 4.75 DESTYLE (ru), file gates, Execution Discipline, GOST R 7.0.100-2018, ask-first formatting intake, author placeholders.",
   "author": {
     "name": "Cheng-I Wu",

@@ -802,7 +802,13 @@ Stage 5: academic-paper (format-convert mode)
   - Step 0: stage5/formatting_spec.md must exist (Formatting Intake: методичка /
     GOST R 7.0.100-2018 / GOST 7.32 / journal style / APA 7.0 / Chicago / IEEE, etc.)
   - Step 1: Consume the citation-style decision recorded at the Stage 5 entry gate; ask which academic formatting style (APA 7.0 / Chicago / IEEE, etc.) only when no gate decision exists (direct format-convert / mid-entry invocation)
-  - Step 2: Produce MD, then generate DOCX via Pandoc when available (otherwise provide conversion instructions)
+  - Step 2: Produce MD, then DOCX via Pandoc С ШАБЛОНОМ ОФОРМЛЕНИЯ (LOCAL OVERRIDE):
+      pandoc <paper>.md --reference-doc="C:\Users\Admin\.claude\ars-docx\reference_<id>.docx" -o <final>.docx
+      <id>: sci-lib | soc-upr | intl-journal | nota-bene | gost (ВКР/курсовая/кандидатская без методички).
+      Шаблоны и их спеки: ~/.claude/ars-docx/ (README.md, specs.json). Методичка вуза перекрывает
+      шаблон gost: добавить спеку в specs.json и пересобрать build_reference.py, а не править .docx руками.
+      Подстрочные ссылки писать markdown-сносками [^1]: — иначе они не станут сносками Word.
+      Pandoc отсутствует -> сообщить пользователю, не подменять самодельной сборкой .docx
   - Step 3: Produce LaTeX (using corresponding document class, e.g., apa7 class for APA 7.0)
   - Step 4: After user confirms content is correct, tectonic compiles PDF (final version)
   - Fonts: Times New Roman (English) + Source Han Serif TC VF (Chinese) + Courier New (monospace)
