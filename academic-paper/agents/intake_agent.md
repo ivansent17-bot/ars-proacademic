@@ -226,17 +226,36 @@ Ask what the user already has:
 ### Step 9: Co-Authors & Contributions
 Reference: `references/credit_authorship_guide.md`
 
-- Ask if this is a single-author or multi-author paper
-- If multi-author:
-  - How many co-authors?
-  - Who is the corresponding author?
-  - Brief description of each co-author's expected contributions (will be formalized using CRediT taxonomy in Phase 7)
-  - Any equal contribution declarations?
-- If single-author: skip, note in configuration
+> **LOCAL OVERRIDE (Иван, 27.07.2026): НЕ ЗАДАВАТЬ вопросов про авторов.** Никогда не спрашивать ФИО, число соавторов, corresponding author, организацию, e-mail, ORCID, вклад соавторов. Всегда фиксировать: single-author, все данные автора — плейсхолдеры (`[Фамилия И. О.]`, `[организация]`, `[e-mail]`), пользователь заполняет их сам в готовом файле. В PCR писать `Co-Authors: single-author (placeholders)`. Пункты ниже сохранены только для справки и НЕ выполняются:
 
-### Step 10: Style Calibration (Optional)
+- ~~Ask if this is a single-author or multi-author paper~~
+- ~~If multi-author: how many co-authors? corresponding author? contributions? equal contribution declarations?~~
+- ~~If single-author: skip, note in configuration~~
 
-Ask the user:
+### Step 10b: Venue Profile (target-journal review criteria) — LOCAL
+
+Отдельно от стиля (Step 10 — как звучит текст) зафиксируй venue-профиль — по каким содержательным критериям целевой журнал рецензирует. Профили журналов: `C:\Users\Admin\.claude\ars-review\<venue-id>\` (profile.md, checklist.md, criteria.json).
+
+- Если целевой журнал — издание Nota Bene / НБ-Медиа («Право и политика», «Программные системы и вычислительные методы», «Genesis», «Исторический журнал», «Философская мысль», «Политика и Общество» и др.) → set `venue_profile: {venue: "nota-bene", path: "C:\\Users\\Admin\\.claude\\ars-review\\nota-bene\\"}` в Paper Configuration Record.
+- Другой журнал с профилем в `ars-review/` → соответствующий venue-id.
+- Журнала нет / профиля нет → `venue_profile: null` (Stage 4.6 VENUE-гейт будет пропущен с пометкой в state).
+
+Когда `venue_profile` задан: (1) `draft_writer` пишет против fatal/major-фильтров профиля (см. его чек-лист); (2) в пайплайне включается **Stage 4.6 VENUE** — блокирующий пред-подачный гейт (скилл `venue-review`).
+
+### Step 10: Style Calibration
+
+**LOCAL OVERRIDE — pre-crystallized genre profiles (MANDATORY for Russian-language papers):**
+
+Genre style profiles already exist at `C:\Users\Admin\.claude\ars-style\` (crystallized from 19 reference works, ~149k words of author prose). For ANY Russian-language paper do NOT ask for writing samples and NEVER set `style_profile: null`. Instead:
+
+1. Map paper type → genre file: научная статья (ВАК и аналоги) → `01_Профиль_ВАК-статья.md`; ВКР / диплом (бакалаврская, магистерская) → `02_Профиль_ВКР.md`; кандидатская диссертация → `03_Профиль_кандидатская.md`; курсовая → `04_Профиль_курсовая.md`. Other genres (реферат, эссе, отчёт) → closest profile by length/format; note the approximation in the record.
+2. Set `style_profile` in the Paper Configuration Record to:
+   `{source: "C:\\Users\\Admin\\.claude\\ars-style\\", genre_file: "<mapped>", anti_ai_layer: "00_АНТИ-AI_обязательный_слой.md", metrics: ["metrics_by_genre.json", "readability_by_genre.json"], enforcement: "hard"}`
+3. `00_АНТИ-AI_обязательный_слой.md` applies ALWAYS, on top of the genre profile, and wins conflicts.
+4. Enforcement is **hard**, not the default soft guide: the profile yields only to explicit методичка / ГОСТ / target-journal requirements (and to content invariants: meaning, numbers, terms, citations).
+5. If the `ars-style` folder is missing or unreadable — STOP and tell the user; do not silently proceed profile-less.
+
+**For non-Russian papers**, the original optional flow applies — ask the user:
 > "Do you have past papers or writing samples you'd like me to learn your style from? Providing 3+ samples helps me match your natural voice. This is optional."
 
 **If user provides samples:**

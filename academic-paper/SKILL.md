@@ -1,6 +1,6 @@
 ---
 name: academic-paper
-description: "12-agent academic paper writing pipeline. 11 modes (full/plan/outline/revision/revision-coach/abstract/lit-review/format-convert/citation-check/disclosure/rebuttal-audit). 6 paper types, 5 citation formats, bilingual abstracts, LaTeX/DOCX-via-Pandoc/PDF output. Style Calibration + Writing Quality Check + Anti-Patterns with IRON RULE markers. Triggers: write paper, academic paper, guide my paper, parse reviews, audit my rebuttal, check my response draft, AI disclosure, 寫論文, 學術論文, 引導我寫論文, 審查意見, 評估回覆, 논문 작성, 초록 작성, 논문 수정, 논문 계획을 도와줘, 심사 의견 반영, 답변서 점검, AI 사용 고지."
+description: "12-agent academic paper writing pipeline. 11 modes (full/plan/outline/revision/revision-coach/abstract/lit-review/format-convert/citation-check/disclosure/rebuttal-audit). 6 paper types, 6 citation formats (incl. GOST R 7.0.100-2018), configurable abstract languages, LaTeX/DOCX-via-Pandoc/PDF output. Style Calibration + Writing Quality Check + Anti-Patterns with IRON RULE markers. Triggers: write paper, academic paper, guide my paper, parse reviews, audit my rebuttal, check my response draft, AI disclosure, 寫論文, 學術論文, 引導我寫論文, 審查意見, 評估回覆, 논문 작성, 초록 작성, 논문 수정, 논문 계획을 도와줘, 심사 의견 반영, 답변서 점검, AI 사용 고지."
 metadata:
   version: "3.3.1"
   last_updated: "2026-08-15"
@@ -16,6 +16,13 @@ metadata:
 # Academic Paper — Academic Paper Writing Agent Team
 
 A general-purpose academic paper writing tool — 12-agent pipeline covering all disciplines, with higher education domain as the default reference.
+
+**v3.3 (Fable) changes:**
+- **GOST citation support** — ГОСТ Р 7.0.100-2018 (bibliography) and ГОСТ 7.32-2017 (report structure) join APA/Chicago/MLA/IEEE/Vancouver as first-class citation/formatting styles in `formatter_agent`, `citation_compliance_agent`, `format-convert` and `citation-check` modes.
+- ⚠️ **Formatting Intake (ask-first) IRON RULE** — Phase 0 NEVER assumes a citation or formatting standard. It asks what governs the work: университетская методичка (request the file and extract its requirements — it overrides everything else), a GOST edition, a journal's guidelines, or a generic style. The confirmed answer is recorded in the Paper Configuration Record (in pipeline mode also `stage5/formatting_spec.md`).
+- **Configurable abstract languages** — the abstract language set is a Phase 0 config item (default: paper language + English). The zh-TW + EN pair remains the default only for Chinese-language workflows.
+- **Pipeline-mode dedup** — when dispatched from `academic-pipeline` (Mode A), Phase 6 (in-pair evaluator) is SKIPPED: pipeline Stage 3's external 5-reviewer panel is the single review layer. Standalone `full` keeps Phase 6. The writer split (Phase 4a/4b) is retained in both.
+- **File-gate compliance** — in pipeline mode the orchestrator collects Phase outputs (Paper Configuration Record, Outline, Draft) into `ars_run/<slug>/stage2/` and validates them per `academic-pipeline/references/file_gate_protocol.md`; Bucket A agents keep writing only inside their phase globs (#134).
 
 **v2.5** adds two writing quality features:
 - **Style Calibration** (intake Step 10, optional) — Provide 3+ past papers and the pipeline learns your writing voice (sentence rhythm, vocabulary preferences, citation integration style). Applied as a soft guide during drafting; discipline conventions always take priority. See `shared/style_calibration_protocol.md`.
@@ -69,6 +76,7 @@ Activate `plan` mode when the user wants guidance, step-by-step planning, or exp
 | Deep research / fact-checking (not paper writing) | `deep-research` |
 | Reviewing a paper (structured review) | `academic-paper-reviewer` |
 | Full research-to-paper pipeline | `academic-pipeline` |
+| Removing AI-style markers from finished Russian text | `ru-academic-destyle` (standalone) |
 
 ### Distinction from `deep-research`
 
@@ -76,8 +84,8 @@ Activate `plan` mode when the user wants guidance, step-by-step planning, or exp
 |---------|-------------------|-----------------|
 | Primary output | Publishable paper draft | Research report |
 | Structure | Journal-ready (IMRaD, etc.) | APA 7.0 report |
-| Citation | Multi-format (APA/Chicago/MLA/IEEE/Vancouver) | APA 7.0 only |
-| Abstract | Bilingual (zh-TW + EN) | Single language |
+| Citation | Multi-format (APA/Chicago/MLA/IEEE/Vancouver/GOST Р 7.0.100-2018) | APA 7.0 only |
+| Abstract | Configurable language set (default: paper language + EN; zh-TW + EN for zh workflows) | Single language |
 | Peer review | Simulated 5-dimension review | Editorial review |
 | Output format | LaTeX/DOCX (via Pandoc)/PDF/Markdown | Markdown only |
 | Revision loop | Max 2 rounds with targeted feedback | Max 2 rounds |
@@ -88,13 +96,13 @@ Activate `plan` mode when the user wants guidance, step-by-step planning, or exp
 
 | # | Agent | Role | Phase |
 |---|-------|------|-------|
-| 1 | `intake_agent` | Configuration interview: paper type, discipline, journal, citation format, output format, language, word count; Handoff detection; Plan mode simplified interview | Phase 0 |
+| 1 | `intake_agent` | Configuration interview: paper type, discipline, journal, **formatting authority (ask-first: методичка/ГОСТ/journal)**, citation format, output format, language, abstract languages, word count; Handoff detection; Plan mode simplified interview | Phase 0 |
 | 2 | `literature_strategist_agent` | Search strategy design, source screening, annotated bibliography, literature matrix | Phase 1 |
 | 3 | `structure_architect_agent` | Paper structure selection, detailed outline, word count allocation, evidence mapping | Phase 2 |
 | 4 | `argument_builder_agent` | Argument construction, claim-evidence chains, logical flow, counter-argument handling; Plan mode argument stress test | Phase 3 / Plan Step 3 |
 | 5 | `draft_writer_agent` | Section-by-section full draft writing, discipline register adjustment, word count tracking | Phase 4 |
 | 6 | `citation_compliance_agent` | Citation format verification, reference list completeness, DOI checking | Phase 5a |
-| 7 | `abstract_bilingual_agent` | Bilingual abstract (zh-TW + EN), 5-7 keywords each | Phase 5b |
+| 7 | `abstract_bilingual_agent` | Abstract in the configured language set (default: paper language + EN), 5-7 keywords each | Phase 5b |
 | 8 | `peer_reviewer_agent` | Simulated double-blind review, five-perspective categorical assessment, revision suggestions (max 2 rounds) | Phase 6 |
 | 9 | `formatter_agent` | Convert to LaTeX/DOCX (via Pandoc)/PDF/Markdown, journal formatting, cover letter, citation format conversion (APA 7 / Chicago / MLA / IEEE / Vancouver) | Phase 7 |
 | 10 | `socratic_mentor_agent` | Plan mode Socratic mentor: chapter-by-chapter guidance, convergence criteria (4 signals), question taxonomy (4 types), INSIGHT extraction | Plan Step 0-3 |
@@ -112,7 +120,15 @@ LaTeX (.tex + .bib), DOCX (via Pandoc), PDF (via LaTeX or Pandoc), Markdown.
 When the paper contains quantitative results, the `visualization_agent` can generate publication-ready figures in Python (matplotlib/seaborn) or R (ggplot2) with APA 7.0 formatting and colorblind-safe palettes. Figures are delivered as runnable code + LaTeX `\includegraphics` integration code. See `references/statistical_visualization_standards.md` for chart type decision trees and code templates.
 
 ### Citation Formats
-APA 7.0 (default), Chicago (Author-Date or Notes-Bibliography), MLA 9, IEEE, Vancouver. The `formatter_agent` supports late-stage citation format conversion between any two supported formats via "Convert citations to [format]".
+APA 7.0 (default for EN), Chicago (Author-Date or Notes-Bibliography), MLA 9, IEEE, Vancouver, **ГОСТ Р 7.0.100-2018** (default candidate for RU — but always confirmed, never assumed). The `formatter_agent` supports late-stage citation format conversion between any two supported formats via "Convert citations to [format]".
+
+⚠️ **IRON RULE — Formatting Intake (ask-first, v3.3)**: the citation/formatting standard is NEVER inferred from the paper's language or discipline. Phase 0 must ask what governs the work:
+1. **Университетская методичка / кафедральные требования** — request the file; extract margins, font, spacing, reference-list format, footnote rules; методичка overrides everything else.
+2. **GOST** — clarify which: ГОСТ Р 7.0.100-2018 (bibliography) and/or ГОСТ 7.32-2017 (report structure).
+3. **Journal guidelines** — request the journal name/URL.
+4. **Generic style** (APA/Chicago/MLA/IEEE/Vancouver) — confirm explicitly.
+
+The confirmed answer is recorded in the Paper Configuration Record (and, in pipeline mode, in `stage5/formatting_spec.md`).
 
 ---
 
@@ -160,11 +176,12 @@ alignment and do not silently reconstruct a target from model memory.
 
 ### Checkpoint Rules
 
-1. ⚠️ **IRON RULE**: User must confirm Paper Configuration Record before proceeding to Phase 1
+1. ⚠️ **IRON RULE**: User must confirm Paper Configuration Record (including the formatting authority — ask-first, v3.3) before proceeding to Phase 1
 2. **Phase 2 -> 3**: User must approve outline (can request restructuring)
 3. ⚠️ **IRON RULE**: Max 2 revision loops; unresolved items -> "Acknowledged Limitations"
-4. **Peer Review** Critical-severity issues block progression to Phase 7
+4. **Peer Review** Critical-severity issues block progression to Phase 7 (standalone mode; Phase 6 is skipped in pipeline mode — v3.3)
 5. User can skip Phase 1 (literature) if providing own sources
+6. **Pipeline mode (v3.3)**: the orchestrator collects `paper_config.md`, `outline.md`, `paper_draft.md` into `ars_run/<slug>/stage2/`; the stage completes only when `academic-pipeline/scripts/validate_stage_gate.py --stage 2` passes
 
 ---
 
@@ -190,7 +207,7 @@ Routing into Mode B requires explicit user signal — `/ars-<mode>` slash comman
 
 > Authoritative orchestration block for the v3.6.6 contract-gated phase splits inside `academic-paper full` mode. Schema 13.1 since v3.6.6 (`shared/sprint_contract.schema.json`). Templates: `shared/contracts/writer/full.json` + `shared/contracts/evaluator/full.json`. Design spec: `docs/design/2026-04-27-ars-v3.6.6-generator-evaluator-contract-design.md` §5.
 >
-> **Applies to `academic-paper full` mode only.** Nine non-full modes (`plan`, `outline-only`, `revision`, `revision-coach`, `abstract-only`, `lit-review`, `format-convert`, `citation-check`, `disclosure`) are byte-equivalent across v3.6.5 → v3.6.6 and do not invoke this protocol. (The later-added `rebuttal-audit` mode is likewise non-full and does not invoke this protocol.) Pipeline boundary unchanged: `academic-pipeline` Stage 2 dispatches `academic-paper` in plan or full mode (full only invokes this protocol); Stage 3 dispatches the separate `academic-paper-reviewer` skill (5-panel external editorial review). The in-pair Phase 6 evaluator under this protocol and the Stage 3 reviewer are different review layers — see design doc §5.1 audit conclusion 2.
+> **Applies to `academic-paper full` mode only.** Nine non-full modes (`plan`, `outline-only`, `revision`, `revision-coach`, `abstract-only`, `lit-review`, `format-convert`, `citation-check`, `disclosure`) are byte-equivalent across v3.6.5 → v3.6.6 and do not invoke this protocol. (The later-added `rebuttal-audit` mode is likewise non-full and does not invoke this protocol.) Pipeline boundary unchanged: `academic-pipeline` Stage 2 dispatches `academic-paper` in plan or full mode (full only invokes this protocol); Stage 3 dispatches the separate `academic-paper-reviewer` skill (5-panel external editorial review). The in-pair Phase 6 evaluator under this protocol and the Stage 3 reviewer are different review layers — see design doc §5.1 audit conclusion 2. **v3.3 (Fable) amendment:** when dispatched from `academic-pipeline` (Mode A), Phase 6 — and therefore the evaluator half of this protocol (calls 6a/6b) — is skipped entirely; Stage 3's external panel is the single review layer. The writer split (Phase 4a/4b) is retained. Standalone `academic-paper full` keeps Phase 6 unchanged.
 
 ### Overview
 
@@ -285,7 +302,7 @@ The v3.6.3 `ARS_PASSPORT_RESET=1` `reset_boundary[]` mechanism (per `academic-pi
 
 - **No graceful-degradation fallback in v3.6.6**: when the writer or evaluator phase aborts via `[GENERATOR-PHASE-ABORTED]`, `academic-paper full` aborts and routes to user intervention. v3.6.7 may introduce a fallback that degrades the affected phase to v3.6.5 single-call behaviour and logs the degradation. v3.6.6 ships with abort-only behaviour. See § "Single-agent generator unusable handling" above for the operational 5% / three-month monitor.
 - **No cross-session resume mid-round**: the four-phase generator-evaluator round is an in-session atomic unit. Manual session split mid-round loses the writer Phase 4a artefact and forces restart from Phase 0. v3.6.7+ may introduce a `pre_commitment_history[]` ledger entry in Schema 9 to persist the writer Phase 4a artefact across session boundaries; v3.6.6 does not implement.
-- **In-pair Phase 6 evaluator vs `academic-paper-reviewer` external review**: the in-pair `peer_reviewer_agent` (Phase 6 evaluator with the v3.6.6 contract gate) and the standalone `academic-paper-reviewer` skill (Stage 3 5-panel external editorial review) serve different review layers and remain documented as known technical debt per design doc §1 known limitations. Routing / merge decisions are deferred to v3.7.x.
+- **In-pair Phase 6 evaluator vs `academic-paper-reviewer` external review**: the in-pair `peer_reviewer_agent` (Phase 6 evaluator with the v3.6.6 contract gate) and the standalone `academic-paper-reviewer` skill (Stage 3 5-panel external editorial review) serve different review layers and remain documented as known technical debt per design doc §1 known limitations. Routing / merge decisions are deferred to v3.7.x. **v3.3 (Fable): resolved for pipeline mode** — Phase 6 is skipped when orchestrator-driven; the duplication persists only if a user explicitly runs standalone full and then separately requests an external review (a legitimate two-layer setup).
 
 ## Operational Modes (11 Modes)
 
@@ -296,10 +313,10 @@ See `references/mode_selection_guide.md` for details.
 | `full` | "Write a paper" | All 9 (+ 11 if quantitative) | Complete paper draft (with figures if applicable) |
 | `outline-only` | "Paper outline" | 1->2->3 | Detailed outline + evidence map |
 | `revision` | "Revise paper" | 8->5->6 | Patch document + deterministically applied revised draft + apply report (#390; revision log via `templates/revision_tracking_template.md`) |
-| `abstract-only` | "Write abstract" | 1->7 | Bilingual abstract + keywords |
+| `abstract-only` | "Write abstract" | 1->7 | Abstract in configured languages + keywords |
 | `lit-review` | "Literature review" | 1->2 | Annotated bibliography + synthesis |
-| `format-convert` | "Convert to LaTeX" / "Convert citations to [format]" | 9 only | Formatted document; includes citation format conversion (APA 7 / Chicago / MLA / IEEE / Vancouver) |
-| `citation-check` | "Check citations" | 6 only | Citation error report |
+| `format-convert` | "Convert to LaTeX" / "Convert citations to [format]" / "оформи по ГОСТ" | 9 only | Formatted document; citation conversion (APA 7 / Chicago / MLA / IEEE / Vancouver / ГОСТ Р 7.0.100-2018); методичка-driven formatting |
+| `citation-check` | "Check citations" / "проверь список литературы" | 6 only | Citation error report (per the confirmed standard, incl. ГОСТ) |
 | `plan` | "guide my paper" / "help me plan my paper" | 1->10->3->4 | Chapter Plan + INSIGHT Collection |
 | `revision-coach` | "parse reviews" / "revision roadmap" / "I got reviewer comments" / "should we push back" / "conference rebuttal" / "grant panel response" / explicitly identified real committee correspondence | 12 only | Peer-review path: immutable Roadmap core + explicit author sidecar + optional Tracking Template/Response Skeleton. Committee path: separate #668 concern tracker + placeholder response skeleton; no Schema 11, reviewer obligation/severity, or determination. |
 | **`disclosure`** (v3.2) | **"AI disclosure for Nature" / "generate AI usage statement"** | **9 only** | **Default venue path: `REQUIRED` / `ACTION_ONLY` / `NOT_REQUIRED` / `UNKNOWN` applicability plus typed halt status; policy-anchor path: anchor-specific render** |
@@ -419,7 +436,7 @@ See `academic-pipeline/SKILL.md` for the complete workflow.
 
 ## Phase 0: Configuration Interview
 
-See `agents/intake_agent.md` for the complete field definitions of the Phase 0 configuration interview. The interview covers 9 core items: paper type, discipline, target journal, citation format, output format, language, abstract, word count, and existing materials — plus co-authors, funding, optional style calibration, the domain evidence profile (Step 12), the citation-verification level (Step 13, #392), and the independent retraction policy (Step 14, #651). Both citation policies are mark-only by default with explicit strict opt-in, seeding `terminal_policies.citation_existence` and `terminal_policies.retraction` respectively. When an author confirms a venue/track/type target, Phase 0 also resolves the #683 `ReviewTargetContext` and initializes the #684 pointer-only binding manifest before any criteria-aware consumer runs; absence uses the explicit field-general `criteria_binding_unavailable` path. Outputs a Paper Configuration Record, awaiting user confirmation.
+See `agents/intake_agent.md` for the complete field definitions of the Phase 0 configuration interview. The interview covers 10 core items: paper type, discipline, target journal, **formatting authority (ask-first: методичка / ГОСТ / journal / style)**, citation format, output format, language, abstract, word count, and existing materials — plus co-authors, funding, optional style calibration, the domain evidence profile (Step 12), the citation-verification level (Step 13, #392), and the independent retraction policy (Step 14, #651). Both citation policies are mark-only by default with explicit strict opt-in, seeding `terminal_policies.citation_existence` and `terminal_policies.retraction` respectively. When an author confirms a venue/track/type target, Phase 0 also resolves the #683 `ReviewTargetContext` and initializes the #684 pointer-only binding manifest before any criteria-aware consumer runs; absence uses the explicit field-general `criteria_binding_unavailable` path. Outputs a Paper Configuration Record, awaiting user confirmation.
 
 ---
 
@@ -460,6 +477,8 @@ Explicit prohibitions to prevent common failure modes:
 | 6 | **Sycophantic revision** | Accepting all reviewer feedback without critical evaluation | Use REVIEWER_DISAGREE status when reviewer is wrong; justify with evidence |
 | 7 | **Scope creep during revision** | Adding unrequested sections/analyses to "improve" the paper | Revision addresses reviewer concerns only; new content requires explicit user approval |
 | 8 | **Ignoring failure paths** | Continuing despite desk-reject signals or fatal methodology flaws | Check `references/failure_paths.md`; invoke F11 Desk-Reject Recovery when triggered |
+| 9 | **Assuming the formatting standard (v3.3)** | Silently applying APA to a Russian ВКР governed by a методичка | Formatting Intake is ask-first; confirm and record the authority before formatting |
+| 10 | **Running Phase 6 inside the pipeline (v3.3)** | Double review layer wastes budget and yields conflicting feedback | In pipeline mode Phase 6 is skipped; Stage 3 panel is the single review layer |
 
 ---
 
@@ -472,11 +491,11 @@ Explicit prohibitions to prevent common failure modes:
 4. **Logical flow** — clear transitions between paragraphs and sections
 5. **Word count compliance** — within +/-10% of target
 
-### Bilingual Abstract Quality
-6. **Independent writing** — zh-TW and EN abstracts are independently composed, NOT mechanical translations
-7. **Structural alignment** — both abstracts cover the same key points in the same order
+### Abstract Quality (configured languages)
+6. **Independent writing** — abstracts in each configured language are independently composed, NOT mechanical translations
+7. **Structural alignment** — all abstracts cover the same key points in the same order
 8. **Keywords** — 5-7 per language, reflecting the paper's core concepts
-9. **Word count** — EN: 150-300 words; zh-TW: 300-500 characters
+9. **Word count** — EN: 150-300 words; RU: 150-250 слов (или по методичке); zh-TW: 300-500 characters
 
 ### Citation Quality
 10. **Format compliance** — 100% adherence to selected citation style
@@ -499,7 +518,7 @@ Explicit prohibitions to prevent common failure modes:
 
 ## Output Language
 
-Follows the user's language. Academic terminology is kept in English. Bilingual abstracts are always provided regardless of the main text language.
+Follows the user's language. Academic terminology is kept in English where conventional. Abstracts are provided in the language set configured at Phase 0 (default: paper language + EN).
 
 ---
 
@@ -511,6 +530,7 @@ academic-paper + deep-research        -> Deep research phase -> paper writing ph
 academic-paper + report-to-website    -> Interactive web version of the paper
 academic-paper + notebooklm-slides-generator -> Presentation slides from paper
 academic-paper + academic-paper-reviewer -> Peer review -> revision loop
+academic-paper + ru-academic-destyle -> Russian paper -> destyle pass (pipeline Stage 4.75)
 ```
 
 ---
@@ -531,6 +551,7 @@ When `ARS_MODEL_TIERING` is set, the dispatching session routes this skill's age
 | Item | Content |
 |------|---------|
 | Skill Version | 3.3.1 |
+| ProScience overlay | GOST R 7.0.100-2018, ask-first formatting intake, style/venue enforcement, author placeholders |
 | Last Updated | 2026-08-15 |
 | Maintainer | Cheng-I Wu |
 | Dependent Skills | deep-research v1.0+ (upstream), academic-paper-reviewer v1.0+ (downstream) |

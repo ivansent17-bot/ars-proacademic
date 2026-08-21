@@ -4,7 +4,7 @@ description: "Orchestrator for the full academic research pipeline: research -> 
 metadata:
   version: "3.21.0"
   last_updated: "2026-08-18"
-  depends_on: "deep-research, academic-paper, academic-paper-reviewer"
+  depends_on: "deep-research, academic-paper, academic-paper-reviewer, ru-academic-destyle (ru papers)"
   status: active
   data_access_level: raw
   task_type: open-ended
@@ -12,6 +12,7 @@ metadata:
     - deep-research
     - academic-paper
     - academic-paper-reviewer
+    - ru-academic-destyle
 ---
 
 # Academic Pipeline v3.21.0 — Full Academic Research Workflow Orchestrator
@@ -23,6 +24,15 @@ A lightweight orchestrator that manages the complete academic pipeline from rese
 **v3.6.3 (opt-in):** Set `ARS_PASSPORT_RESET=1` to promote FULL checkpoints to context-reset boundaries. Use `resume_from_passport=<hash>` in a fresh session to continue from the recorded stage. See [`references/passport_as_reset_boundary.md`](references/passport_as_reset_boundary.md).
 
 **v3.8 (opt-in):** Set `ARS_CLAIM_AUDIT=1` to enable the L3 claim-faithfulness audit gate at the Stage 4 → Stage 5 transition. When the flag is set, the orchestrator dispatches `claim_ref_alignment_audit_agent` after the v3.7.1 Cite-Time Provenance Finalizer and before `formatter_agent`'s hard gate. The audit emits `claim_audit_results[]` + `uncited_assertions[]` + `claim_drifts[]` + `constraint_violations[]` + `audit_sampling_summaries[]` aggregates per the 8-row matrix; HIGH-WARN classes gate-refuse output via the formatter REFUSE rules 6-10. Default OFF for v3.8.0 — ramp-on plan deferred to post-calibration evidence (spec §5 mode flag rationale). See `agents/claim_ref_alignment_audit_agent.md` and the orchestrator §3.6 prose.
+
+**v4.1 (Fable) Core Changes — enforcement rework:**
+
+1. ⚠️ **File-Gate Enforcement** — every stage MUST materialize its deliverables as files in the run directory `ars_run/<slug>/` and pass `python3 "${CLAUDE_PLUGIN_ROOT}/academic-pipeline/scripts/validate_stage_gate.py" <run_dir> --stage <N>` (exit 0) before the pipeline may advance. The validator's actual stdout is shown at the checkpoint. See `references/file_gate_protocol.md`.
+2. ⚠️ **Guard-compliant write paths (#134)** — Bucket A subagents keep writing ONLY inside their `allowed_write_globs` (e.g. reviewers → `phase1_*/**`, synthesizer → `phase2_*/**`; Bash denied for Bucket A). The unfenced orchestrator (Bucket D) collects canonical copies into `ars_run/<slug>/stageN/` at stage completion and is the ONLY entity that runs the validator via Bash.
+3. ⚠️ **Real subagent dispatch** — Stage 3's five reviewers and Stage 2.5/4.5 integrity verification run as separate clean-context subagents, each writing its own report file. Inline role-play simulation of the panel is a named anti-pattern; the validator's report-similarity check catches it.
+4. **Stage 4.75 DESTYLE (ru)** — for Russian-language papers, the standalone `ru-academic-destyle` skill (pipeline mode) runs between FINAL INTEGRITY (4.5) and FINALIZE (5) with two blocking script gates (`scan_axes.py --gate`, `check_invariants.py`). Non-Russian papers skip it with an explicit `state.json` note. After 4.75 the substantive text is FROZEN.
+5. ⚠️ **Formatting Intake (ask-first)** — no formatting/citation standard is ever assumed. The orchestrator asks for the governing document (университетская методичка / GOST R 7.0.100-2018 / GOST 7.32 / journal guidelines / APA etc.) at intake and re-confirms before Stage 5; the confirmed answer is recorded in `stage5/formatting_spec.md`. Stage 5 does not start without it.
+6. **Pipeline-mode dedup** — inside the pipeline, `academic-paper` Phase 6 (in-pair evaluator) is skipped: Stage 3's external 5-reviewer panel is the single review layer (standalone `academic-paper full` keeps Phase 6).
 
 **v2.0 Core Improvements**:
 1. **Mandatory user confirmation checkpoints** — Each stage completion requires user confirmation before proceeding to the next step
@@ -65,10 +75,11 @@ resume_from_passport=<hash> [stage=<n>] [mode=<m>]
 
 **Execution flow:**
 1. Detect the user's current stage and available materials
-2. Recommend the optimal mode for each stage
-3. Dispatch the corresponding skill for each stage
-4. **After each stage completion, proactively prompt and wait for user confirmation**
-5. Track progress throughout; Pipeline Status Dashboard available at any time
+2. **Create run directory `ars_run/<slug>/` + `state.json`; run Formatting Intake (ask-first); detect paper language (ru → Stage 4.75 in route)**
+3. Recommend the optimal mode for each stage
+4. Dispatch the corresponding skill for each stage (clean-context subagents where required)
+5. **After each stage: collect artifacts into `ars_run/<slug>/stageN/` → run `validate_stage_gate.py` → include its output in the checkpoint → wait for user confirmation**
+6. Track progress throughout; Pipeline Status Dashboard available at any time
 
 ---
 
@@ -89,6 +100,7 @@ resume_from_passport=<hash> [stage=<n>] [mode=<m>]
 | Only need to review a paper | `academic-paper-reviewer` |
 | Only need to check citation format | `academic-paper` (citation-check mode) |
 | Only need to convert paper format | `academic-paper` (format-convert mode) |
+| Only need to remove AI-style markers from Russian text | `ru-academic-destyle` (standalone) |
 
 ### Trigger Exclusions
 
@@ -98,7 +110,7 @@ resume_from_passport=<hash> [stage=<n>] [mode=<m>]
 
 ---
 
-## Pipeline Stages (10 Stages)
+## Pipeline Stages (11 Stages)
 
 | Stage | Name | Skill / Agent Called | Available Modes | Deliverables |
 |-------|------|---------------------|----------------|-------------|
@@ -110,6 +122,8 @@ resume_from_passport=<hash> [stage=<n>] [mode=<m>]
 | **3'** | **RE-REVIEW** | **`academic-paper-reviewer`** | **re-review** | **Verification review report: revision response checklist + residual issues** |
 | **4'** | **RE-REVISE** | **`academic-paper`** | **revision** | **Second revised draft (if needed)** |
 | **4.5** | **FINAL INTEGRITY** | **`integrity_verification_agent`** | **final-check** | **Final verification report (declared checks must PASS; registered denominators and unknown/out-of-scope states remain visible)** |
+| **4.6** | **VENUE (гейт журнала)** | **`venue-review`** | **pipeline Stage 4.6** | **`stage4_6/venue_review.md`: пред-подачное рецензирование под целевой журнал (venue-профиль в `~/.claude/ars-review/<venue>/`); строка `ВЕРДИКТ ГЕЙТА: PASS` обязательна; FAIL → возврат на Stage 4; журнал без профиля → пропуск с пометкой в state** |
+| **4.75** | **DESTYLE (ru only)** | **`ru-academic-destyle`** | **pipeline** | **`stage4_75/`: destyled paper + before/after.json + invariants.json + destyle report; both script gates must PASS; skipped with state note for non-ru papers** |
 | 5 | FINALIZE | `academic-paper` | format-convert | Final Paper (default MD; DOCX via Pandoc when available, otherwise conversion instructions; ask about LaTeX; confirm correctness; PDF) |
 | **6** | **PROCESS SUMMARY** | **orchestrator** | **auto** | **Paper creation process record MD + LaTeX to PDF (bilingual)** |
 
@@ -131,11 +145,13 @@ This mirrors PaperOrchestra's parallel execution of Plot Generation (Step 2) and
 5. **Stage 4 REVISE** -> user confirmation -> Stage 3'
 6. **Stage 3' RE-REVIEW** -> Accept|Minor -> Stage 4.5 / Major -> Stage 4'
 7. **Stage 4' RE-REVISE** -> user confirmation -> Stage 4.5 (no return to review)
-8. **Stage 4.5 FINAL INTEGRITY** -> PASS (zero issues) -> Stage 5 (FAIL -> fix and re-verify; after 3 unresolved rounds -> Integrity Check FAIL Loop -> recorded user decision)
-9. **Stage 5 FINALIZE** -> MD -> DOCX via Pandoc when available (otherwise instructions) -> ask about LaTeX -> confirm -> PDF -> completion checkpoint (FULL) -> Stage 6 (user may decline Stage 6: marked `skipped`, pipeline goes directly to `completed`)
-10. **Stage 6 PROCESS SUMMARY** -> ask language version -> generate process record MD -> LaTeX -> PDF -> terminal acknowledgement (`finish` / `end` / `done` / `confirm`, or an unambiguous natural-language equivalent) -> pipeline global state `completed`
+8. **Stage 4.5 FINAL INTEGRITY** -> PASS (zero issues) -> Stage 4.6 if the target journal has a venue profile / else Stage 4.75 (ru) / else Stage 5 (FAIL -> fix and re-verify; after 3 unresolved rounds -> Integrity Check FAIL Loop -> recorded user decision)
+8a. **Stage 4.6 VENUE (гейт журнала)** -> `ВЕРДИКТ ГЕЙТА: PASS` -> Stage 4.75 (ru) / Stage 5 otherwise. FAIL -> Stage 4 (доработка по venue_review, затем 4.5 -> 4.6 повторно). Пропускается для журналов без venue-профиля с пометкой в state
+9. **Stage 4.75 DESTYLE (ru)** -> both script gates PASS -> user confirmation -> Stage 5. Substantive text is FROZEN after this stage; any later content change reopens the pipeline at Stage 4.5
+10. **Stage 5 FINALIZE** -> `formatting_spec.md` confirmed -> MD -> DOCX via Pandoc when available (otherwise instructions) -> ask about LaTeX -> confirm -> PDF -> completion checkpoint (FULL) -> Stage 6 (user may decline Stage 6: marked `skipped`, pipeline goes directly to `completed`)
+11. **Stage 6 PROCESS SUMMARY** -> ask language version -> generate process record MD -> LaTeX -> PDF -> terminal acknowledgement (`finish` / `end` / `done` / `confirm`, or an unambiguous natural-language equivalent) -> pipeline global state `completed`
 
-See `references/pipeline_state_machine.md` for complete state transition definitions.
+See `references/pipeline_state_machine.md` for complete state transition definitions. **v4.1**: every transition additionally requires `validate_stage_gate.py` PASS for the completed stage (`references/file_gate_protocol.md`).
 
 ---
 
@@ -149,12 +165,15 @@ See `references/pipeline_state_machine.md` for complete state transition definit
 |------|-----------|---------|
 | FULL | First checkpoint; after integrity boundaries; Stage 5 completion (final-deliverable acceptance) | Full deliverables list + decision dashboard + all options |
 | SLIM | After 2+ consecutive "continue" responses on non-critical stages | One-line status + explicit continue/pause prompt |
-| MANDATORY | Integrity FAIL; Review decision; Stage 5 entry gate (before finalization) | Cannot be skipped; requires explicit user input |
+| MANDATORY | Integrity FAIL; Review decision; Stage 4.75 gate FAIL; Stage 5 entry gate (before finalization) | Cannot be skipped; requires explicit user input |
 
 ### Decision Dashboard (shown at FULL checkpoints)
 
 ```
 ━━━ Stage [X] [Name] Complete ━━━
+
+Gate: validate_stage_gate.py --stage [X] → [PASS/FAIL]
+[actual validator output lines]
 
 Metrics:
 - Word count: [N] (target: [T] +/-10%)    [OK/OVER/UNDER]
@@ -179,7 +198,7 @@ Ready to proceed to Stage [Y]? You can also:
 
 1. **First checkpoint**: always FULL
 2. **After 2+ consecutive "continue" without review**: prompt user awareness ("You've continued [N] times in a row. Want to review progress?")
-3. **Integrity boundaries (Stage 2.5, 4.5)**: always MANDATORY
+3. **Integrity boundaries (Stage 2.5, 4.5) and destyle gates (Stage 4.75)**: always MANDATORY
 4. **Review decisions (Stage 3, 3')**: always MANDATORY
 5. **Before finalization (Stage 5 entry gate)**: always MANDATORY — this is the checkpoint between Stage 4.5 PASS and the Stage 5 dispatch, where the user explicitly confirms proceeding and makes the finalization-format decision (citation style); the in-stage LaTeX question and content confirmation stay inside Stage 5 execution. The Stage 5 completion checkpoint (Final Paper delivered, before Stage 6) is FULL — never SLIM. See `references/pipeline_state_machine.md` § Stage 5 boundary semantics
 6. **All other stages**: start FULL, downgrade to SLIM if user says "just continue"
@@ -200,7 +219,7 @@ Before presenting the checkpoint to the user, the orchestrator asks itself:
 2. **Sycophantic concession**: Did the latest stage uncritically accept all feedback without pushback?
 3. **Criterion trajectory**: For each applicable named criterion, did the evidence-anchored status improve, remain unchanged, regress, or become non-comparable? Never reduce this to a hidden scalar or `latest >= previous`. Pause and flag any unresolved decision-bearing regression; use `NOT_COMPARABLE` when the criterion or evidence base changed.
 4. **Scope discipline**: Did the latest stage add content not requested by the user or the revision roadmap?
-5. **Completeness**: Are all required deliverables for this stage present?
+5. **Completeness**: Are all required deliverables for this stage present ON DISK in `ars_run/<slug>/` (not merely mentioned in chat)?
 
 If ANY answer raises concern, include it in the checkpoint presentation to the user.
 
@@ -238,7 +257,11 @@ pipeline_orchestrator_agent analyzes the user's input:
    - Full workflow (research to publication)
    - Partial workflow (only certain stages needed)
 
-3. Determine entry point, confirm with user
+3. Paper language? (ru --> Stage 4.75 DESTYLE is in the route)
+
+4. Formatting Intake (ask-first): методичка / GOST / journal guidelines / generic style?
+
+5. Create ars_run/<slug>/ + state.json; determine entry point, confirm with user
 ```
 
 ### Step 2: MODE RECOMMENDATION
@@ -265,9 +288,12 @@ Call the corresponding skill (does not do work itself, purely dispatching):
 4. Monitor stage completion status
 
 After completion:
-1. Compile deliverables list
-2. Update pipeline state (call state_tracker_agent)
-3. [MANDATORY] Proactively prompt checkpoint, wait for user confirmation
+1. Collect deliverables as FILES into ars_run/<slug>/stageN/ (orchestrator copies
+   Bucket A outputs from their phase directories — see file_gate_protocol.md)
+2. Run: python3 "${CLAUDE_PLUGIN_ROOT}/academic-pipeline/scripts/validate_stage_gate.py" <run_dir> --stage <N>  (orchestrator only;
+   Bucket A agents have no Bash). FAIL --> stage is NOT complete; fix or re-dispatch
+3. Update pipeline state (call state_tracker_agent; record gate verdict in state.json)
+4. [MANDATORY] Proactively prompt checkpoint (include validator stdout), wait for user confirmation
 ```
 
 ### Step 4: TRANSITION
@@ -279,6 +305,7 @@ After user confirmation:
 2. Trigger handoff protocol (defined in each skill's SKILL.md):
    - Stage 1  --> 2: deep-research handoff (RQ Brief + Methodology Blueprint + Bibliography + Synthesis)
    - #672 cargo on every transition: exact builder-produced `preregistration-artifact/1.0` receipt and its named companion when provided; validate and carry byte-for-byte
+   - **INJECTION IRON RULE: when dispatching ANY writing/revising subagent (Stage 2 draft, Stage 4/4' revision, Stage 5 formatting), the orchestrator pastes VERBATIM into the subagent prompt: (a) `C:\Users\Admin\.claude\ars-style\INJECT_STYLE_BLOCK.md` for Russian papers, and (b) `C:\Users\Admin\.claude\ars-review\<venue>\INJECT_VENUE_BLOCK.md` when venue_profile is set. Never paraphrase these blocks — copy the file contents. Subagents have a self-fetch fallback, but the orchestrator not pasting them is a protocol violation.**
    - Stage 2  --> 2.5: Pass complete paper to integrity_verification_agent
    - Stage 2.5 --> 3: Pass the Stage 2.5 paper to reviewer (verified, or carrying the recorded FAIL-loop partially-unverified warning)
    - Stage 3  --> 4: Pass Revision Roadmap to academic-paper revision mode
@@ -288,6 +315,11 @@ After user confirmation:
    - Stage 4/4' --> 4.5: Pass revision-completed paper to integrity_verification_agent (final verification); on the Major-via-4' path the Stage 3' traceability sidecar travels along as gate input
    - Stage 4.5 --> 5: Pass the accepted final draft (verified, or carrying the recorded FAIL-loop partially-unverified warning) to the one mandatory Stage-5 entry checkpoint; run #660 then #672 against that same accepted artifact ID/SHA-256 before format-convert dispatch
    - Stage 5  --> 6: Pass final deliverables list + the Process-Summary projection of pipeline state history, omitting the #673 activity projection of terminal root `run_id`, pending/sealed activity fields, selected-store data, renderer output, and diagnostics (user may decline Stage 6 at the Stage 5 completion checkpoint)
+   - Stage 4.5 --> 4.6 (target journal has venue profile): Pass verified paper + venue-id (default nota-bene) to venue-review (pipeline Stage 4.6 mode); it reads `C:\Users\Admin\.claude\ars-review\<venue>\` and gates on `ВЕРДИКТ ГЕЙТА`. FAIL routes back to Stage 4 with the venue fix-list
+   - Stage 4.6 --> 4.75 (ru) / 5 (non-ru): on PASS, pass paper forward
+   - Stage 4.5/4.6 --> 4.75 (ru papers): Pass verified paper + terms.txt + genre (ВАК-статья/ВКР/кандидатская/курсовая, from Paper Configuration Record) to ru-academic-destyle (pipeline mode); destyle reads the matching genre profile in `C:\Users\Admin\.claude\ars-style\` as its positive target
+   - Stage 4.75 --> 5: Pass stage4_75/paper_destyled.md to format-convert mode (per stage5/formatting_spec.md)
+   - Stage 4.5/4.6 --> 5 (non-ru): Pass verified final draft to format-convert mode
 3. Begin next stage
 ```
 
@@ -303,7 +335,8 @@ At every stage transition, the orchestrator MUST inject a brief core principles 
 🔄 Core Principles Reinforcement:
 1. [Most relevant IRON RULE for the next stage]
 2. [Most relevant Anti-Pattern to avoid in the next stage]
-3. Quality check: Is the output of [Current Stage] at least as good as [Previous Stage]? If not, PAUSE.
+3. Gate check: validate_stage_gate.py PASS recorded for [Current Stage]? If not, DO NOT TRANSITION.
+4. Quality check: Is the output of [Current Stage] at least as good as [Previous Stage]? If not, PAUSE.
 
 Checkpoint: [MANDATORY/ADVISORY] — [What user needs to confirm]
 ---
@@ -315,7 +348,7 @@ Checkpoint: [MANDATORY/ADVISORY] — [What user needs to confirm]
 
 ## Phase-by-phase Invocation Contract (v3.9.2)
 
-academic-pipeline is the orchestrator skill that coordinates the full ARS pipeline across 10 stages (delegating to deep-research, academic-paper, academic-paper-reviewer). Two invocation modes:
+academic-pipeline is the orchestrator skill that coordinates the full ARS pipeline across 11 stages (delegating to deep-research, academic-paper, academic-paper-reviewer). Two invocation modes:
 
 **Mode A — orchestrator-driven (default):** `pipeline_orchestrator_agent` runs all stages end-to-end with state tracking via Material Passport. `state_tracker_agent`, `integrity_verification_agent`, `collaboration_depth_agent`, and `claim_ref_alignment_audit_agent` are dispatched by the orchestrator at the appropriate checkpoints.
 
@@ -332,6 +365,56 @@ In Mode B, **single-phase agents (Bucket A per `docs/design/2026-05-18-ars-v3.9.
 Routing into Mode B requires explicit user signal — `/ars-<mode>` slash command or `[direct-mode]` prefix. Ambiguous cross-phase input defaults to clarification per `.claude/CLAUDE.md` Routing Discipline + `shared/references/intent_clarification_protocol.md`. **Critically:** if `pipeline_orchestrator_agent` is dispatched on ambiguous cross-phase materials, the orchestrator itself currently cannot reconcile (this is the v3.10 conductor #134 work) — v3.9.2 routes such cases to clarification BEFORE the orchestrator runs.
 
 **Enforcement (v3.9.2):** Phase Boundary blocks on downstream Bucket A agents + advisory verifier (`scripts/check_pipeline_integrity.py`) + a deterministic PreToolUse write-scope guard in hook-enabled runtimes (#134 rescope, PR #294). Multi-phase envelope + orchestrator structured intake remain forward-scope (#134 Slices 3-5).
+
+---
+
+## File-Gate Enforcement (v4.1) ⚠️ IRON RULE
+
+The recurring failure mode of prompt-only orchestration is *simulated* execution: one pass "role-plays" reviewers or integrity checks and advances. v4.1 closes this with verifiable artifacts:
+
+1. **Run directory.** At pipeline start create `ars_run/<slug>/` + `state.json`. All stage deliverables are files inside it (artifact map: `references/file_gate_protocol.md`).
+2. **Blocking validator.** A stage is complete ONLY when `python3 "${CLAUDE_PLUGIN_ROOT}/academic-pipeline/scripts/validate_stage_gate.py" <run_dir> --stage <N>` prints PASS (exit 0). The actual stdout is included in the checkpoint. Re-telling the validator's result without running it is prohibited.
+3. **Guard-compliant collection (#134).** Bucket A subagents write only inside their `allowed_write_globs` (`scripts/ars_phase_scope_manifest.json`) and have no Bash. The orchestrator (Bucket D, unfenced) copies their outputs into `ars_run/<slug>/stageN/` and runs the validator. Do not ask a Bucket A agent to write into `ars_run/` or to run any script — the write-scope guard will deny it.
+4. **Subagent dispatch.** Stage 3 reviewers (5) and Stage 2.5/4.5 integrity verification run as separate clean-context subagents; each writes its own report file in its phase directory. The synthesizer starts only after the validator confirms 5 existing, mutually distinct reports.
+5. **No retro-fitting.** Generating an artifact after the fact to satisfy the gate is prohibited — a missing file means the stage was not executed.
+6. **Degraded mode.** If Python is unavailable, announce prompt-only degraded mode explicitly and obtain user confirmation.
+
+---
+
+## Execution Discipline (LOCAL OVERRIDE, Иван, 27.07.2026) ⚠️ IRON RULE
+
+Правила поверх всего скилла; при конфликте с текстом ниже по файлу — приоритетны. Введены по итогам боевых прогонов, где оркестратор подменял стадии импровизацией.
+
+1. **Стадии не заменяются импровизацией.** Каждая стадия выполняется РОВНО так, как описана в этом скилле, суб-агентами, которых она предписывает. Особо Stage 3 (панель из 5 рецензентов) и Stage 2.5/4.5 (integrity): их ЗАПРЕЩЕНО выполнять «своими силами» в основном контексте — только отдельные clean-context суб-агенты, каждый со своим файлом-отчётом, затем validate_stage_gate. «Я сам быстро отрецензирую/проверю» = провал стадии, даже если результат выглядит разумно. Стадию невозможно выполнить как предписано → СТОП и доложить пользователю; тихое упрощение запрещено.
+2. **Модельная политика — через штатный `ARS_MODEL_TIERING` (upstream #517), НЕ вручную.** Ручное понижение агентов ЗАПРЕЩЕНО. Канон — `shared/model_tiering.md` + `scripts/model_tiering_manifest.json`: 26 агентов judgment-type идут ТОЛЬКО на модели сессии, 13 execution-type понижаются ровно на одну ступень с полом Opus-class. **Sonnet-класс не допускается ни для одного агента ARS ни при каких настройках.** Агенты Stage 1 (`research_question`, `research_architect`, `synthesis`, `source_verification`, `risk_of_bias`, `editor_in_chief`, `literature_strategist`) — judgment-type: понижать их запрещено, именно они формируют доказательную базу, и никакой гейт 2.5/4.5 потом не починит плохие источники. Переключатель выставляется в окружении: `ARS_MODEL_TIERING=economy` для сессии на фронтир-модели, `quality-boost` для сессии ниже фронтира (judgment-агенты поднимаются до фронтира на гейтах), не задан — всё на модели сессии (дефолт, безопасен). **Соразмерность research:** для статьи достаточно 12–20 добротных источников и ОДНОЙ волны разведчиков; вторая волна — только если Stage 2.5 нашла дыры в базе. Не раскапывать тему «до дна» и не плодить итерации ресерча без явного запроса пользователя. **Соразмерность режима:** полный 11-стадийный прогон — не дефолт. Для короткой статьи под знакомый журнал выбирать `academic-paper` + venue-гейт, а не весь пайплайн; полный прогон — когда нужны обе волны рецензирования.
+3. **Пользователю — только финальный .docx.** Все промежуточные файлы (черновики, рецензии, планы правок, integrity-отчёты, все *.md в ars_run/) — служебные артефакты: обязательны для гейтов, но пользователю их НЕ отправлять, НЕ прикладывать и НЕ перечислять списком. Финальное сообщение = путь к одному .docx + короткий текстовый итог с фактическими вердиктами гейтов. В Cowork промежуточные файлы держать в рабочей папке ars_run/, в outputs выкладывать только финальный .docx.
+4. **Данные автора — всегда плейсхолдеры, вопросов не задавать.** ФИО/организация/e-mail/ORCID/соавторы/научрук НИКОГДА не запрашиваются (ни на intake, ни на Stage 5/6): сразу ставить `[Фамилия И. О.]`, `[организация]`, `[e-mail]`; заполняет пользователь. Intake-вопрос про соавторов (Step 9 academic-paper) отключён тем же оверрайдом.
+
+---
+
+## Formatting Intake Protocol (ask-first, v4.1) ⚠️ IRON RULE
+
+Never assume a formatting or citation standard. At intake AND again before Stage 5 ask:
+
+1. What governs the formatting: **университетская методичка** (request the file), **GOST R 7.0.100-2018 / GOST 7.32-2017**, a specific journal's guidelines, or a generic style (APA/Chicago/MLA/IEEE/Vancouver)?
+2. If a методичка is provided, it takes precedence: extract margins, font, spacing, reference-list format, footnote rules; record them in `stage5/formatting_spec.md`.
+3. No document — present options, record the confirmed choice in `formatting_spec.md` («подтверждено пользователем»).
+
+Stage 5 MUST NOT start without `formatting_spec.md`. The abstract/annotation language set is likewise an intake question (no hard-coded language pair).
+
+---
+
+## Stage 4.75: DESTYLE Protocol (Russian papers, v4.1)
+
+For papers whose main text is Russian, after Stage 4.5 PASS the orchestrator dispatches the standalone `ru-academic-destyle` skill in **pipeline mode** (its `references/modes.md` §5):
+
+1. Orchestrator prepares `terms.txt` (key terminology from the Paper Configuration Record + glossary).
+2. The skill runs its verifiable cycle: `scan_axes.py --json before.json` → edit → `scan_axes.py --gate --compare` (blocking, ≤3 iterations) → `check_invariants.py` (blocking: numbers, citation markers, footnotes, quotes, headings, terms must survive).
+3. Deliverables in `ars_run/<slug>/stage4_75/`: `paper_destyled.md`, `before.json`, `after.json`, `invariants.json`, `destyle_report.md`.
+4. `validate_stage_gate.py --stage 4.75` must PASS.
+5. ⚠️ **IRON RULE**: after Stage 4.75 the substantive text is FROZEN. Stage 5 performs format conversion only; any later content change reopens the pipeline at Stage 4.5.
+
+Non-Russian papers: stage is skipped; `state.json` records `{"stage": "4.75", "status": "skipped", "reason": "non-ru"}`. The destyle scripts run from the orchestrator/main session (unfenced) — never from a Bucket A agent.
 
 ---
 
@@ -536,6 +619,11 @@ Explicit prohibitions to prevent common failure modes:
 | 6 | **Re-verifying only known issues at Stage 4.5** | Final integrity check only re-checks Stage 2.5 findings | Stage 4.5 must run a fresh from-scratch pass; revision may introduce new issues |
 | 7 | **Inflating Collaboration Quality scores** | Giving 90/100 to avoid awkward self-criticism | Honesty first: no inflation, no pleasantries; cite specific evidence for every score |
 | 8 | **Bypassing the Failure Mode Checklist block** (v3.2) | "The 7-mode checklist is new, let's skip it this run" | Stage 2.5/4.5 Failure Mode Checklist is MANDATORY and BLOCKING; there is no unrecorded bypass — every override requires user reasoning recorded for Stage 6 |
+| 9 | **Simulating subagents inline (v4.1)** | One pass "role-plays" 5 reviewers or the integrity agent; reports correlate; nothing was verified | Dispatch real clean-context subagents; each writes its own file; the validator similarity check catches fakes |
+| 10 | **Chat-only deliverables (v4.1)** | Stage output exists only as conversation text; lost on session end; gate unverifiable | Every deliverable is a file under `ars_run/<slug>/`; the gate checks the disk, not the chat |
+| 11 | **Assuming a formatting standard (v4.1)** | Silently applying APA to a Russian ВКР governed by a методичка | Formatting Intake is ask-first; Stage 5 requires `stage5/formatting_spec.md` |
+| 12 | **Editing content after DESTYLE (v4.1)** | Post-4.75 "improvements" reintroduce AI markers and dodge integrity | Text is frozen after 4.75; content changes reopen the pipeline at Stage 4.5 |
+| 13 | **Fencing violations (v4.1, #134)** | Asking a Bucket A agent to write into ars_run/ or run Bash scripts | Bucket A writes stay in their phase globs; the orchestrator collects files and runs the validator |
 
 ---
 
@@ -549,6 +637,9 @@ Explicit prohibitions to prevent common failure modes:
 | State tracking | Pipeline state updated in real time; Progress Dashboard accurate |
 | **Mandatory checkpoint** | **User confirmation required after each stage completion** |
 | **Mandatory integrity check** | **Stage 2.5 and 4.5 always run; continuation past a non-PASS result requires an explicit, recorded user decision** |
+| **Mandatory file gate (v4.1)** | **`validate_stage_gate.py` PASS required for every stage transition; validator stdout shown to the user verbatim** |
+| **Mandatory destyle gates (v4.1, ru)** | **Stage 4.75 `scan_axes.py --gate` + `check_invariants.py` must PASS for Russian papers** |
+| **Ask-first formatting (v4.1)** | **No standard assumed; методичка/GOST/journal confirmed and recorded in `stage5/formatting_spec.md`** |
 | **Mandatory failure mode checklist** (v3.2) | **Stage 2.5 and 4.5 must run the 7-mode AI research failure checklist; suspected failures block; overrides require user reasoning** |
 | No overstepping | ⚠️ IRON RULE: Orchestrator does not perform substantive research/writing/reviewing, only dispatching |
 | No forcing | ⚠️ IRON RULE: User can pause or exit pipeline at any time (but cannot skip integrity checks) |
@@ -571,6 +662,10 @@ Explicit prohibitions to prevent common failure modes:
 | Stage 3' | Verification still has major issues | Enter Stage 4' for final revision |
 | Stage 4' | Issues remain after revision | Mark as Acknowledged Limitations; proceed to Stage 4.5 |
 | Stage 4.5 | Final verification FAIL | Fix and re-verify (max 3 rounds) |
+| Stage 3 | Reviewer reports too similar (validator FAIL) | Re-dispatch the offending reviewers as fresh subagents; never hand-edit reports to pass the gate |
+| Stage 4.75 | Threshold gate FAIL after 3 iterations | Report residual markers; user decides: accept with note / manual pass |
+| Stage 4.75 | Invariants gate FAIL | Roll back damaging edits and re-run; NEVER accept a version that changed numbers/citations |
+| Stage 5 | No formatting_spec.md | Run Formatting Intake; do not guess |
 | Any | User leaves midway | Save pipeline state; can resume from breakpoint next time |
 | Any | Skill execution failure | Report error; suggest retry, pause, or mode switch. Do not skip mandatory integrity or failure-mode gates |
 
@@ -592,6 +687,7 @@ Explicit prohibitions to prevent common failure modes:
 
 | Reference | Purpose |
 |-----------|---------|
+| **`references/file_gate_protocol.md`** | **v4.1 file-gate enforcement: run directory, artifact map, guard-compliant collection, validator rules, formatting intake** |
 | `references/pipeline_state_machine.md` | Complete state machine definition: all legal transitions, preconditions, actions |
 | `references/plagiarism_detection_protocol.md` | Phase D originality verification protocol + self-plagiarism + AI text characteristics |
 | `references/mode_advisor.md` | Unified cross-skill decision tree: maps user intent to optimal skill + mode |
@@ -659,7 +755,14 @@ Stage 3': academic-paper-reviewer
   - re-review mode: Verification review (focused on revision responses)
 
 Stage 4/4': academic-paper (revision mode)
+
+Stage 4.75 (ru papers): ru-academic-destyle (pipeline mode)
+  - scan_axes.py --gate + check_invariants.py, both blocking
+  - text frozen after this stage
+
 Stage 5: academic-paper (format-convert mode)
+  - Step 0: stage5/formatting_spec.md must exist (Formatting Intake: методичка /
+    GOST R 7.0.100-2018 / GOST 7.32 / journal style / APA 7.0 / Chicago / IEEE, etc.)
   - Step 1: Consume the citation-style decision recorded at the Stage 5 entry gate; ask which academic formatting style (APA 7.0 / Chicago / IEEE, etc.) only when no gate decision exists (direct format-convert / mid-entry invocation)
   - Step 2: Produce MD, then generate DOCX via Pandoc when available (otherwise provide conversion instructions)
   - Step 3: Produce LaTeX (using corresponding document class, e.g., apa7 class for APA 7.0)
@@ -677,6 +780,7 @@ Stage 5: academic-paper (format-convert mode)
 | `deep-research` | Dispatched (Stage 1 research phase) |
 | `academic-paper` | Dispatched (Stage 2 writing, Stage 4/4' revision, Stage 5 formatting) |
 | `academic-paper-reviewer` | Dispatched (Stage 3 first review, Stage 3' verification review) |
+| `ru-academic-destyle` | Dispatched (Stage 4.75 destyle for Russian papers; standalone companion skill) |
 
 ---
 
@@ -696,9 +800,10 @@ When `ARS_MODEL_TIERING` is set, the dispatching session routes this skill's age
 | Item | Content |
 |------|---------|
 | Skill Version | 3.21.0 |
+| ProScience overlay | Stage 4.6 VENUE gate, Stage 4.75 DESTYLE (ru), file gates, Execution Discipline, GOST R 7.0.100-2018 |
 | Last Updated | 2026-08-18 |
 | Maintainer | Cheng-I Wu |
-| Dependent Skills | deep-research v2.0+, academic-paper v2.0+, academic-paper-reviewer v1.1+ |
+| Dependent Skills | deep-research v2.0+, academic-paper v2.0+, academic-paper-reviewer v1.1+, ru-academic-destyle v2.1+ (ru) |
 | Role | Full academic research workflow orchestrator |
 
 ---
