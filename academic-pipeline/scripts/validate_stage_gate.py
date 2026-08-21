@@ -27,6 +27,7 @@ import argparse
 import json
 import os
 import re
+import subprocess
 import sys
 
 # Карта обязательных артефактов: stage -> [(относительный путь, мин. байт)]
@@ -180,12 +181,147 @@ def check_destyle(run_dir, problems):
             problems.append('stage4_75/invariants.json: не парсится как JSON')
 
 
+# --- Лимиты прогона (state.json -> "limits"); дефолты из Execution Discipline ---
+DEFAULT_LIMITS = {
+    'sources_min': 12,
+    'sources_max': 20,
+    'target_chars': None,   # целевой объём текста; None = не проверять
+    'tolerance': 0.10,      # допуск по объёму (доля)
+    'language': None,       # 'ru' включает стилевой гейт
+    'style_gate': True,
+}
+
+SRC_LINE = re.compile(r'^\s*(?:\[?\d{1,3}[\].)]|[-*•])\s+\S')
+
+
+def load_limits(run_dir):
+    lim = dict(DEFAULT_LIMITS)
+    p = os.path.join(run_dir, 'state.json')
+    if os.path.isfile(p):
+        try:
+            st = json.loads(read(p))
+        except ValueError:
+            return lim
+        if isinstance(st.get('language'), str):
+            lim['language'] = st['language']
+        for k, v in (st.get('limits') or {}).items():
+            if k in lim:
+                lim[k] = v
+    return lim
+
+
+def count_sources(text):
+    """Записи списка литературы: нумерованные или маркированные строки длиной > 30."""
+    return sum(1 for ln in text.split('\n')
+               if SRC_LINE.match(ln) and len(ln.strip()) > 30)
+
+
+def check_sources(run_dir, problems, lim):
+    p = os.path.join(run_dir, 'stage1', 'bibliography.md')
+    if not os.path.isfile(p):
+        return
+    n = count_sources(read(p))
+    if n == 0:
+        problems.append('stage1/bibliography.md: не распознано ни одной записи '
+                        '(нумерованный или маркированный список)')
+        return
+    if n > lim['sources_max']:
+        problems.append(
+            'stage1/bibliography.md: %d источников при потолке %d — разведка вышла '
+            'за соразмерность (Execution Discipline §2). Сократить до ядра или '
+            'осознанно поднять limits.sources_max в state.json'
+            % (n, lim['sources_max']))
+    if n < lim['sources_min']:
+        problems.append('stage1/bibliography.md: %d источников при минимуме %d — '
+                        'база недостаточна' % (n, lim['sources_min']))
+
+
+def check_volume(run_dir, rel, problems, lim):
+    target = lim.get('target_chars')
+    if not target:
+        return
+    p = os.path.join(run_dir, rel)
+    if not os.path.isfile(p):
+        return
+    n = len(read(p))
+    pct = int(lim['tolerance'] * 100)
+    hi = int(target * (1 + lim['tolerance']))
+    lo = int(target * (1 - lim['tolerance']))
+    if n > hi:
+        problems.append('%s: %d знаков при цели %d (+%d%% = %d) — превышение на %d знаков; '
+                        'сокращать сейчас, а не «на потом»' % (rel, n, target, pct, hi, n - hi))
+    elif n < lo:
+        problems.append('%s: %d знаков при цели %d (-%d%% = %d) — недобор объёма'
+                        % (rel, n, target, pct, lo))
+
+
+def _scan_axes_path():
+    cands = []
+    env = os.environ.get('ARS_DESTYLE_SCRIPTS')
+    if env:
+        cands.append(os.path.join(env, 'scan_axes.py'))
+    cands.append(os.path.join(os.path.expanduser('~'), '.claude', 'skills',
+                              'ru-academic-destyle', 'scripts', 'scan_axes.py'))
+    for c in cands:
+        if os.path.isfile(c):
+            return c
+    return None
+
+
+def check_style_scan(run_dir, rel, out_rel, problems, lim):
+    """Стилевой гейт НА ЭТАПЕ ПИСЬМА: если жанровый профиль не применён,
+    оси AI-маркеров вылезут уже в первом черновике, а не на Stage 4.75."""
+    lang = (lim.get('language') or '').lower()
+    if lang not in ('ru', 'rus', 'russian') or not lim.get('style_gate'):
+        return
+    src = os.path.join(run_dir, rel)
+    if not os.path.isfile(src):
+        return
+    scan = _scan_axes_path()
+    if not scan:
+        problems.append(
+            'стилевой гейт не выполнен: не найден scan_axes.py '
+            '(~/.claude/skills/ru-academic-destyle/scripts/ или $ARS_DESTYLE_SCRIPTS). '
+            'Профиль стиля молча не применять — остановиться и доложить пользователю')
+        return
+    out = os.path.join(run_dir, out_rel)
+    os.makedirs(os.path.dirname(out), exist_ok=True)
+    try:
+        r = subprocess.run([sys.executable, scan, src, '--json', out, '--gate'],
+                           capture_output=True, text=True, encoding='utf-8',
+                           errors='replace', timeout=300)
+    except (OSError, subprocess.SubprocessError) as exc:
+        problems.append('стилевой гейт не запустился: %s' % exc)
+        return
+    if r.returncode != 0:
+        tail = [ln.strip() for ln in (r.stdout or '').split('\n')
+                if ln.strip().startswith('FAIL')]
+        detail = '; '.join(tail[:6]) or 'пороги превышены'
+        problems.append(
+            '%s: стилевой гейт FAIL — %s. Значит, жанровый профиль ars-style НЕ был '
+            'применён при письме (отчёт: %s). Переписывать по профилю сейчас, '
+            'а не откладывать на Stage 4.75' % (rel, detail, out_rel))
+
+
 def validate(run_dir, stage):
     problems = []
     if stage not in REQUIRED:
         print(f'Неизвестный стейдж: {stage}. Допустимые: {", ".join(REQUIRED)}')
         sys.exit(2)
     check_files(run_dir, stage, problems)
+    lim = load_limits(run_dir)
+    if stage == '1':
+        check_sources(run_dir, problems, lim)
+    if stage == '2':
+        check_volume(run_dir, 'stage2/paper_draft.md', problems, lim)
+        check_style_scan(run_dir, 'stage2/paper_draft.md',
+                         'stage2/style_scan.json', problems, lim)
+    if stage == '4':
+        check_volume(run_dir, 'stage4/paper_revised.md', problems, lim)
+    if stage == "4'":
+        check_volume(run_dir, 'stage4p/paper_revised2.md', problems, lim)
+    if stage == '5':
+        check_volume(run_dir, 'stage5/final_paper.md', problems, lim)
     if stage == '2.5':
         check_verdict(run_dir, 'stage2_5/integrity_report.md', problems,
                       'проверка целостности (Stage 2.5)')
@@ -208,17 +344,60 @@ def validate(run_dir, stage):
     return problems
 
 
+STAGE_ORDER = ['1', '2', '2.5', '3', '4', "3'", "4'", '4.5', '4.6', '4.75', '5', '6']
+
+
+def ledger(run_dir):
+    """Карта прогона для входа в НОВОМ чате: где остановились и что уже на диске.
+    Тяжёлые проверки не запускает — только наличие и размер артефактов."""
+    print('\n=== ЛЕДЖЕР ПРОГОНА: %s ===\n' % run_dir)
+    lim = load_limits(run_dir)
+    print('  язык: %s | источники %s-%s | цель объёма: %s знаков (±%d%%)\n'
+          % (lim.get('language') or 'не задан', lim['sources_min'], lim['sources_max'],
+             lim.get('target_chars') or 'не задана', int(lim['tolerance'] * 100)))
+    last_done = None
+    for st in STAGE_ORDER:
+        req = REQUIRED[st]
+        have = [rel for rel, mb in req
+                if os.path.isfile(os.path.join(run_dir, rel))
+                and os.path.getsize(os.path.join(run_dir, rel)) >= mb]
+        if len(have) == len(req):
+            mark, last_done = 'ГОТОВО   ', st
+        elif have:
+            mark = 'ЧАСТИЧНО '
+        else:
+            mark = '—        '
+        print('  Stage %-5s %s %d/%d артефактов' % (st, mark, len(have), len(req)))
+    nxt = None
+    for st in STAGE_ORDER:
+        req = REQUIRED[st]
+        if not all(os.path.isfile(os.path.join(run_dir, rel)) for rel, _ in req):
+            nxt = st
+            break
+    print('\n  Последний завершённый: %s' % (last_done or 'нет'))
+    print('  Точка входа: Stage %s' % (nxt or 'всё выполнено'))
+    print('\n  Перед продолжением в новом чате прогнать:'
+          '\n    validate_stage_gate.py %s --stage %s' % (run_dir, last_done or '1'))
+
+
 def main():
     ap = argparse.ArgumentParser(description='ARS v4.0 валидатор файловых гейтов')
     ap.add_argument('run_dir', help='рабочая папка прогона (ars_run/<slug>)')
     ap.add_argument('--stage', help="стейдж: 1, 2, 2.5, 3, 4, 3', 4', 4.5, 4.6, 4.75, 5, 6")
     ap.add_argument('--all-completed', action='store_true',
                     help='проверить все стейджи, отмеченные completed в state.json')
+    ap.add_argument('--ledger', action='store_true',
+                    help='карта прогона: что уже на диске и с какого стейджа входить '
+                         '(для продолжения в новом чате)')
     args = ap.parse_args()
 
     if not os.path.isdir(args.run_dir):
         print(f'FAIL: рабочая папка не существует: {args.run_dir}')
         sys.exit(1)
+
+    if args.ledger:
+        ledger(args.run_dir)
+        return
 
     stages = []
     if args.all_completed:

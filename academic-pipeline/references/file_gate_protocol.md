@@ -49,6 +49,25 @@
 | 5 FINALIZE | `stage5/` | `formatting_spec.md` (зафиксированный ответ пользователя: методичка/ГОСТ/журнал/стиль), `final_paper.md` + конвертированные форматы | formatter → `phase7_<slug>/`; оркестратор копирует |
 | 6 PROCESS SUMMARY | `stage6/` | `process_summary.md` (+ полный лог гейтов из state.json) | оркестратор |
 
+## Бюджет прогона в `state.json` (проверяется блокирующе)
+
+```json
+{"slug": "...", "language": "ru",
+ "limits": {"sources_min": 12, "sources_max": 20, "target_chars": 24000,
+            "tolerance": 0.10, "style_gate": true},
+ "stages": []}
+```
+
+| Ключ | Что проверяет валидатор |
+|---|---|
+| `limits.sources_max` / `sources_min` | Stage 1: число записей в `stage1/bibliography.md` |
+| `limits.target_chars` + `tolerance` | Stage 2/4/4'/5: объём черновика и всех последующих версий; превышение — такой же FAIL, как недобор |
+| `language: "ru"` + `style_gate` | Stage 2: `scan_axes.py --gate` по `stage2/paper_draft.md`; отчёт кладётся в `stage2/style_scan.json`. FAIL = жанровый профиль `ars-style` не был применён при письме |
+
+Стилевой гейт на Stage 2 — ранняя диагностика: без него непринятый профиль всплывает
+только на Stage 4.75, после нескольких часов работы. Скрипт ищется в
+`~/.claude/skills/ru-academic-destyle/scripts/` или по `$ARS_DESTYLE_SCRIPTS`.
+
 ## Правила гейта (IRON RULES)
 
 1. **Переход между стейджами разрешён только после** `python3 "${CLAUDE_PLUGIN_ROOT}/academic-pipeline/scripts/validate_stage_gate.py" <run_dir> --stage <N>` → PASS. Фактический stdout скрипта включается в чекпоинт.

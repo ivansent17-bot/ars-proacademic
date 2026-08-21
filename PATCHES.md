@@ -1,6 +1,6 @@
 # ProScience fork — academic-research-skills
 
-**Версия форка:** 4.2.0
+**Версия форка:** 4.2.1
 **База:** upstream `v3.21.0` (Cheng-I Wu, CC-BY-NC-4.0, лицензия и авторство сохранены)
 **Апстрим:** https://github.com/Imbad0202/academic-research-skills
 
@@ -24,7 +24,7 @@ git rebase v3.22.0 ps          # подставить новый тег
 |---|---|
 | `academic-pipeline/SKILL.md` | Stage 4.6 VENUE (блокирующий гейт целевого журнала); Stage 4.75 DESTYLE (ru); file-gate enforcement (`ars_run/<slug>/`, `state.json`, валидатор); INJECTION IRON RULE (дословная вставка style/venue-блоков в пишущих суб-агентов); Execution Discipline; ask-first formatting intake |
 | `academic-pipeline/references/file_gate_protocol.md` | карта артефактов по стадиям + контракт Stage 4.6 |
-| `academic-pipeline/scripts/validate_stage_gate.py` | блокирующий валидатор стадий, включая `4.6` и проверку строки `ВЕРДИКТ ГЕЙТА: PASS` |
+| `academic-pipeline/scripts/validate_stage_gate.py` | блокирующий валидатор стадий: `4.6` + `ВЕРДИКТ ГЕЙТА: PASS`; **потолок источников** (Stage 1), **бюджет объёма** ±10 % (Stage 2/4/4'/5), **ранний стилевой гейт** `scan_axes.py --gate` по черновику Stage 2 для ru, режим `--ledger` для входа в новом чате |
 | `academic-paper/SKILL.md` | ГОСТ Р 7.0.100-2018 в списке форматов; ask-first formatting intake; настраиваемый языковой набор аннотации вместо зашитого zh-TW+EN |
 | `academic-paper/agents/intake_agent.md` | Step 9 (вопросы про авторов отключены — всегда плейсхолдеры), Step 10 (style_profile задан файлами `ars-style/`), Step 10b (детекция venue → venue_profile) |
 | `academic-paper/agents/draft_writer_agent.md` | жёсткое style+venue enforcement с self-fetch fallback |
