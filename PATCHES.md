@@ -1,6 +1,6 @@
 # ProScience fork — academic-research-skills
 
-**Версия форка:** 4.2.2
+**Версия форка:** 4.2.3
 **База:** upstream `v3.21.0` (Cheng-I Wu, CC-BY-NC-4.0, лицензия и авторство сохранены)
 **Апстрим:** https://github.com/Imbad0202/academic-research-skills
 

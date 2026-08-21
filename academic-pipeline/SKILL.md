@@ -435,7 +435,14 @@ The recurring failure mode of prompt-only orchestration is *simulated* execution
 Never assume a formatting or citation standard. At intake AND again before Stage 5 ask:
 
 1. What governs the formatting: **университетская методичка** (request the file), **GOST R 7.0.100-2018 / GOST 7.32-2017**, a specific journal's guidelines, or a generic style (APA/Chicago/MLA/IEEE/Vancouver)?
-2. If a методичка is provided, it takes precedence: extract margins, font, spacing, reference-list format, footnote rules; record them in `stage5/formatting_spec.md`.
+2. If a методичка is provided, it takes precedence. LOCAL OVERRIDE — это делает АГЕНТ, целиком:
+   прочитать присланный файл (.docx/.pdf/фото) -> вынуть поля, шрифт, кегли основного текста/сносок/подписей,
+   интервал, абзацный отступ, выравнивание, нумерацию страниц -> записать в `stage5/formatting_spec.md`
+   И спекой в `~/.claude/ars-docx/specs.json` (id `вкр-<вуз>`, поле `source`) -> самому запустить
+   `build_reference.py <id>` -> собирать Stage 5 с этим шаблоном. Пользователю НЕ выдавать команд
+   для терминала и не переспрашивать параметры, которые есть в файле: он прислал документ,
+   получает .docx. Показать ему только короткую сводку вычитанных чисел — чтобы он поймал
+   ошибку распознавания. Чего в методичке нет — брать из `reference_gost.docx` и помечать в сводке как дефолт.
 3. No document — present options, record the confirmed choice in `formatting_spec.md` («подтверждено пользователем»).
 
 Stage 5 MUST NOT start without `formatting_spec.md`. The abstract/annotation language set is likewise an intake question (no hard-coded language pair).

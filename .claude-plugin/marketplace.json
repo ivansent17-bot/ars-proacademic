@@ -10,7 +10,7 @@
       "name": "academic-research-skills",
       "source": "./",
       "description": "4 skills + 27 modes, base upstream v3.21.0 + ProScience overlay: venue gate, ru destyle, GOST, file gates.",
-      "version": "4.2.2",
+      "version": "4.2.3",
       "license": "CC-BY-NC-4.0",
       "skills": [
         "./academic-paper",
