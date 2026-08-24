@@ -810,7 +810,7 @@ Stage 5: academic-paper (format-convert mode)
     GOST R 7.0.100-2018 / GOST 7.32 / journal style / APA 7.0 / Chicago / IEEE, etc.)
   - Step 1: Consume the citation-style decision recorded at the Stage 5 entry gate; ask which academic formatting style (APA 7.0 / Chicago / IEEE, etc.) only when no gate decision exists (direct format-convert / mid-entry invocation)
   - Step 2: Produce MD, then DOCX via Pandoc С ШАБЛОНОМ ОФОРМЛЕНИЯ (LOCAL OVERRIDE):
-      pandoc <paper>.md --reference-doc="C:\Users\Admin\.claude\ars-docx\reference_<id>.docx" -o <final>.docx
+      pandoc <paper>.md --reference-doc="C:\Users\Admin\.claude\ars-docx\reference_<id>.docx" --syntax-highlighting=none -o <final>.docx
       <id>: sci-lib | soc-upr | intl-journal | nota-bene | gost (ВКР/курсовая/кандидатская без методички).
       Шаблоны и их спеки: ~/.claude/ars-docx/ (README.md, specs.json). Методичка вуза перекрывает
       шаблон gost: добавить спеку в specs.json и пересобрать build_reference.py, а не править .docx руками.
