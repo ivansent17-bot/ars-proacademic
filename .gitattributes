@@ -4,3 +4,19 @@
 # (#454). Scope the rule to *.sh so existing line-ending behavior for other files is
 # untouched.
 *.sh text eol=lf
+
+# Attested content files MUST stay LF, even on Windows checkouts. Many guards pin a
+# hardcoded SHA-256 over the RAW BYTES of files in these trees -- review_panel_provenance.py
+# (CONTRACT_SHA256), check_revision_claim_drift_suite_v2.py, check_v3_9_4_temporal_
+# verification.py, build_cross_document_consistency_advisory.py, and the skills/ mirror
+# equality check. A core.autocrlf=true checkout rewrites every newline to CRLF, so those
+# pins fail as spurious "digest drifted" attestation errors while the content is in fact
+# untouched. Same class as the *.sh rule above (#454): bytes that are attested must not be
+# rewritten on checkout. text=auto keeps binary detection intact.
+shared/**                   text=auto eol=lf
+scripts/**                  text=auto eol=lf
+evals/heldout/**            text=auto eol=lf
+academic-paper-reviewer/**  text=auto eol=lf
+academic-pipeline/**        text=auto eol=lf
+deep-research/**            text=auto eol=lf
+skills/**                   text=auto eol=lf
