@@ -332,7 +332,7 @@ After user confirmation:
 2. Trigger handoff protocol (defined in each skill's SKILL.md):
    - Stage 1  --> 2: deep-research handoff (RQ Brief + Methodology Blueprint + Bibliography + Synthesis)
    - #672 cargo on every transition: exact builder-produced `preregistration-artifact/1.0` receipt and its named companion when provided; validate and carry byte-for-byte
-   - **INJECTION IRON RULE: when dispatching ANY writing/revising subagent (Stage 2 draft, Stage 4/4' revision, Stage 5 formatting), the orchestrator pastes VERBATIM into the subagent prompt: (a) `C:\Users\Admin\.claude\ars-style\INJECT_STYLE_BLOCK.md` for Russian papers, and (b) `C:\Users\Admin\.claude\ars-review\<venue>\INJECT_VENUE_BLOCK.md` when venue_profile is set. Never paraphrase these blocks — copy the file contents. Subagents have a self-fetch fallback, but the orchestrator not pasting them is a protocol violation.**
+   - **INJECTION IRON RULE: when dispatching ANY writing/revising subagent (Stage 2 draft, Stage 4/4' revision, Stage 5 formatting), the orchestrator pastes VERBATIM into the subagent prompt: (a) `~/.claude/ars-style/INJECT_STYLE_BLOCK.md` for Russian papers, and (b) `~/.claude/ars-review/<venue>/INJECT_VENUE_BLOCK.md` when venue_profile is set. Never paraphrase these blocks — copy the file contents. Subagents have a self-fetch fallback, but the orchestrator not pasting them is a protocol violation.**
    - Stage 2  --> 2.5: Pass complete paper to integrity_verification_agent
    - Stage 2.5 --> 3: Pass the Stage 2.5 paper to reviewer (verified, or carrying the recorded FAIL-loop partially-unverified warning)
    - Stage 3  --> 4: Pass Revision Roadmap to academic-paper revision mode
@@ -342,9 +342,9 @@ After user confirmation:
    - Stage 4/4' --> 4.5: Pass revision-completed paper to integrity_verification_agent (final verification); on the Major-via-4' path the Stage 3' traceability sidecar travels along as gate input
    - Stage 4.5 --> 5: Pass the accepted final draft (verified, or carrying the recorded FAIL-loop partially-unverified warning) to the one mandatory Stage-5 entry checkpoint; run #660 then #672 against that same accepted artifact ID/SHA-256 before format-convert dispatch
    - Stage 5  --> 6: Pass final deliverables list + the Process-Summary projection of pipeline state history, omitting the #673 activity projection of terminal root `run_id`, pending/sealed activity fields, selected-store data, renderer output, and diagnostics (user may decline Stage 6 at the Stage 5 completion checkpoint)
-   - Stage 4.5 --> 4.6 (target journal has venue profile): Pass verified paper + venue-id (default nota-bene) to venue-review (pipeline Stage 4.6 mode); it reads `C:\Users\Admin\.claude\ars-review\<venue>\` and gates on `ВЕРДИКТ ГЕЙТА`. FAIL routes back to Stage 4 with the venue fix-list
+   - Stage 4.5 --> 4.6 (target journal has venue profile): Pass verified paper + venue-id (default nota-bene) to venue-review (pipeline Stage 4.6 mode); it reads `~/.claude/ars-review/<venue>/` and gates on `ВЕРДИКТ ГЕЙТА`. FAIL routes back to Stage 4 with the venue fix-list
    - Stage 4.6 --> 4.75 (ru) / 5 (non-ru): on PASS, pass paper forward
-   - Stage 4.5/4.6 --> 4.75 (ru papers): Pass verified paper + terms.txt + genre (ВАК-статья/ВКР/кандидатская/курсовая, from Paper Configuration Record) to ru-academic-destyle (pipeline mode); destyle reads the matching genre profile in `C:\Users\Admin\.claude\ars-style\` as its positive target
+   - Stage 4.5/4.6 --> 4.75 (ru papers): Pass verified paper + terms.txt + genre (ВАК-статья/ВКР/кандидатская/курсовая, from Paper Configuration Record) to ru-academic-destyle (pipeline mode); destyle reads the matching genre profile in `~/.claude/ars-style/` as its positive target
    - Stage 4.75 --> 5: Pass stage4_75/paper_destyled.md to format-convert mode (per stage5/formatting_spec.md)
    - Stage 4.5/4.6 --> 5 (non-ru): Pass verified final draft to format-convert mode
 3. Begin next stage
@@ -810,7 +810,7 @@ Stage 5: academic-paper (format-convert mode)
     GOST R 7.0.100-2018 / GOST 7.32 / journal style / APA 7.0 / Chicago / IEEE, etc.)
   - Step 1: Consume the citation-style decision recorded at the Stage 5 entry gate; ask which academic formatting style (APA 7.0 / Chicago / IEEE, etc.) only when no gate decision exists (direct format-convert / mid-entry invocation)
   - Step 2: Produce MD, then DOCX via Pandoc С ШАБЛОНОМ ОФОРМЛЕНИЯ (LOCAL OVERRIDE):
-      pandoc <paper>.md --reference-doc="C:\Users\Admin\.claude\ars-docx\reference_<id>.docx" --syntax-highlighting=none -o <final>.docx
+      pandoc <paper>.md --reference-doc="$HOME/.claude/ars-docx/reference_<id>.docx" --syntax-highlighting=none -o <final>.docx
       <id>: sci-lib | soc-upr | intl-journal | nota-bene | gost (ВКР/курсовая/кандидатская без методички).
       Шаблоны и их спеки: ~/.claude/ars-docx/ (README.md, specs.json). Методичка вуза перекрывает
       шаблон gost: добавить спеку в specs.json и пересобрать build_reference.py, а не править .docx руками.

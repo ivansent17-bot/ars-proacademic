@@ -234,9 +234,9 @@ Reference: `references/credit_authorship_guide.md`
 
 ### Step 10b: Venue Profile (target-journal review criteria) — LOCAL
 
-Отдельно от стиля (Step 10 — как звучит текст) зафиксируй venue-профиль — по каким содержательным критериям целевой журнал рецензирует. Профили журналов: `C:\Users\Admin\.claude\ars-review\<venue-id>\` (profile.md, checklist.md, criteria.json).
+Отдельно от стиля (Step 10 — как звучит текст) зафиксируй venue-профиль — по каким содержательным критериям целевой журнал рецензирует. Профили журналов: `~/.claude/ars-review/<venue-id>/` (profile.md, checklist.md, criteria.json).
 
-- Если целевой журнал — издание Nota Bene / НБ-Медиа («Право и политика», «Программные системы и вычислительные методы», «Genesis», «Исторический журнал», «Философская мысль», «Политика и Общество» и др.) → set `venue_profile: {venue: "nota-bene", path: "C:\\Users\\Admin\\.claude\\ars-review\\nota-bene\\"}` в Paper Configuration Record.
+- Если целевой журнал — издание Nota Bene / НБ-Медиа («Право и политика», «Программные системы и вычислительные методы», «Genesis», «Исторический журнал», «Философская мысль», «Политика и Общество» и др.) → set `venue_profile: {venue: "nota-bene", path: "~/.claude/ars-review/nota-bene/"}` в Paper Configuration Record.
 - Другой журнал с профилем в `ars-review/` → соответствующий venue-id.
 - Журнала нет / профиля нет → `venue_profile: null` (Stage 4.6 VENUE-гейт будет пропущен с пометкой в state).
 
@@ -246,11 +246,11 @@ Reference: `references/credit_authorship_guide.md`
 
 **LOCAL OVERRIDE — pre-crystallized genre profiles (MANDATORY for Russian-language papers):**
 
-Genre style profiles already exist at `C:\Users\Admin\.claude\ars-style\` (crystallized from 19 reference works, ~149k words of author prose). For ANY Russian-language paper do NOT ask for writing samples and NEVER set `style_profile: null`. Instead:
+Genre style profiles already exist at `~/.claude/ars-style/` (crystallized from 19 reference works, ~149k words of author prose). For ANY Russian-language paper do NOT ask for writing samples and NEVER set `style_profile: null`. Instead:
 
 1. Map paper type → genre file: научная статья (ВАК и аналоги) → `01_Профиль_ВАК-статья.md`; ВКР / диплом (бакалаврская, магистерская) → `02_Профиль_ВКР.md`; кандидатская диссертация → `03_Профиль_кандидатская.md`; курсовая → `04_Профиль_курсовая.md`. Other genres (реферат, эссе, отчёт) → closest profile by length/format; note the approximation in the record.
 2. Set `style_profile` in the Paper Configuration Record to:
-   `{source: "C:\\Users\\Admin\\.claude\\ars-style\\", genre_file: "<mapped>", anti_ai_layer: "00_АНТИ-AI_обязательный_слой.md", metrics: ["metrics_by_genre.json", "readability_by_genre.json"], enforcement: "hard"}`
+   `{source: "~/.claude/ars-style/", genre_file: "<mapped>", anti_ai_layer: "00_АНТИ-AI_обязательный_слой.md", metrics: ["metrics_by_genre.json", "readability_by_genre.json"], enforcement: "hard"}`
 3. `00_АНТИ-AI_обязательный_слой.md` applies ALWAYS, on top of the genre profile, and wins conflicts.
 4. Enforcement is **hard**, not the default soft guide: the profile yields only to explicit методичка / ГОСТ / target-journal requirements (and to content invariants: meaning, numbers, terms, citations).
 5. If the `ars-style` folder is missing or unreadable — STOP and tell the user; do not silently proceed profile-less.

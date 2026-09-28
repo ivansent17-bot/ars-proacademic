@@ -1,6 +1,6 @@
 # Style Calibration Protocol
 
-> **LOCAL OVERRIDE (Russian-language papers).** Pre-crystallized genre profiles exist at `C:\Users\Admin\.claude\ars-style\` (19 works, ~149k words): `01` ВАК-статья / `02` ВКР / `03` кандидатская / `04` курсовая + mandatory `00_АНТИ-AI_обязательный_слой.md` (applies on top, wins conflicts) + numeric targets in `metrics_by_genre.json` / `readability_by_genre.json`. For Russian papers these profiles ARE the Style Profile: do not re-collect samples, do not set null, and apply them as **hard** enforcement — NOT Priority 3 (SOFT) below. They yield only to explicit методичка / ГОСТ / target-journal requirements and to content invariants (meaning, numbers, terms, citations). The priority system below applies unchanged to non-Russian papers.
+> **LOCAL OVERRIDE (Russian-language papers).** Pre-crystallized genre profiles exist at `~/.claude/ars-style/` (19 works, ~149k words): `01` ВАК-статья / `02` ВКР / `03` кандидатская / `04` курсовая + mandatory `00_АНТИ-AI_обязательный_слой.md` (applies on top, wins conflicts) + numeric targets in `metrics_by_genre.json` / `readability_by_genre.json`. For Russian papers these profiles ARE the Style Profile: do not re-collect samples, do not set null, and apply them as **hard** enforcement — NOT Priority 3 (SOFT) below. They yield only to explicit методичка / ГОСТ / target-journal requirements and to content invariants (meaning, numbers, terms, citations). The priority system below applies unchanged to non-Russian papers.
 
 ## Purpose
 
