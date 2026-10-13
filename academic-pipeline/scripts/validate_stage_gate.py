@@ -19,6 +19,10 @@ R&R-матрицы). Оркестратор НЕ имеет права объя�
     python3 validate_stage_gate.py <run_dir> --stage 4.75
     python3 validate_stage_gate.py <run_dir> --all-completed
 
+С 4.3.0 (13.10.2026): жанр и коридор дословности в state.json (Stage 1), тексты
+источников stage1/texts/ (Stage 1), доля дословного verbatim_share.py
+(Stage 2/4/4'/4.75/5), стилевой гейт с осями v3 по жанру (Stage 2 и 4.75).
+
 Коды выхода: 0 = PASS, 1 = FAIL (артефакты отсутствуют/неполны), 2 = ошибка вызова.
 """
 
@@ -189,7 +193,17 @@ DEFAULT_LIMITS = {
     'tolerance': 0.10,      # допуск по объёму (доля)
     'language': None,       # 'ru' включает стилевой гейт
     'style_gate': True,
+    # С 13.10.2026: жанр включает оси v3 стилевого гейта (scan_axes.py --genre),
+    # verbatim_* — правило дословности (доли, 0.10 = 10 %). None = прогон заведён
+    # до правила: на Stage 1 это FAIL, на остальных стадиях — предупреждение.
+    'genre': None,          # статья / вкр / курсовая / кандидатская
+    'verbatim_min': None,
+    'verbatim_max': None,
+    'verbatim_sources_min': 3,
 }
+
+# Строки для пользователя, которые не являются провалом (доля дословного и т. п.).
+INFO = []
 
 SRC_LINE = re.compile(r'^\s*(?:\[?\d{1,3}[\].)]|[-*•])\s+\S')
 
@@ -204,6 +218,8 @@ def load_limits(run_dir):
             return lim
         if isinstance(st.get('language'), str):
             lim['language'] = st['language']
+        if isinstance(st.get('genre'), str):
+            lim['genre'] = st['genre']
         for k, v in (st.get('limits') or {}).items():
             if k in lim:
                 lim[k] = v
@@ -286,21 +302,112 @@ def check_style_scan(run_dir, rel, out_rel, problems, lim):
         return
     out = os.path.join(run_dir, out_rel)
     os.makedirs(os.path.dirname(out), exist_ok=True)
+    cmd = [sys.executable, scan, src, '--json', out, '--gate']
+    # дословные куски источников — чужой текст: в замер стиля не входят
+    spans = os.path.join(run_dir, os.path.dirname(out_rel), 'verbatim_spans_found.txt')
+    if os.path.isfile(spans):
+        cmd += ['--exclude-spans', spans]
+    if lim.get('genre'):
+        cmd += ['--genre', lim['genre']]
+    else:
+        INFO.append('ВНИМАНИЕ: в state.json не задан жанр (limits.genre) — оси v3 '
+                    '(опора, родительные цепочки, триады, пол ритма) НЕ проверены')
     try:
-        r = subprocess.run([sys.executable, scan, src, '--json', out, '--gate'],
-                           capture_output=True, text=True, encoding='utf-8',
+        r = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8',
                            errors='replace', timeout=300)
     except (OSError, subprocess.SubprocessError) as exc:
         problems.append('стилевой гейт не запустился: %s' % exc)
         return
     if r.returncode != 0:
-        tail = [ln.strip() for ln in (r.stdout or '').split('\n')
-                if ln.strip().startswith('FAIL')]
-        detail = '; '.join(tail[:6]) or 'пороги превышены'
+        lines = (r.stdout or '').split('\n')
+        # итоговый список провалов идёт после заголовка гейта; таблица осей выше дублирует его
+        if any('=== ГЕЙТ' in ln for ln in lines):
+            lines = lines[[i for i, ln in enumerate(lines) if '=== ГЕЙТ' in ln][-1]:]
+        tail = [ln.strip()[6:] for ln in lines if ln.strip().startswith('FAIL')]
+        detail = '; '.join(tail[:8]) or 'пороги превышены'
+        if rel.startswith('stage4_75'):
+            problems.append('%s: стилевой гейт FAIL после дестилизации — %s (отчёт: %s)'
+                            % (rel, detail, out_rel))
+        else:
+            problems.append(
+                '%s: стилевой гейт FAIL — %s. Значит, жанровый профиль ars-style НЕ был '
+                'применён при письме (отчёт: %s). Переписывать по профилю сейчас, '
+                'а не откладывать на Stage 4.75' % (rel, detail, out_rel))
+
+
+# --- Правило дословности (Иван, 13.10.2026): 10–20 % текста — куски источников
+# слово в слово, каждый со ссылкой на свой источник. Тексты источников — stage1/texts/.
+def _verbatim_on(lim):
+    return lim.get('verbatim_min') is not None
+
+
+def check_texts(run_dir, problems, lim):
+    if not _verbatim_on(lim):
+        return
+    p = os.path.join(run_dir, 'stage1', 'texts', 'index.json')
+    if not os.path.isfile(p):
+        problems.append('stage1/texts/index.json нет — тексты источников не скачаны. '
+                        'Запустить: fetch_sources.py <run_dir> (рядом с этим валидатором); '
+                        'без текстов правило дословности не выполнить')
+        return
+    try:
+        srcs = json.loads(read(p)).get('sources', [])
+    except ValueError:
+        problems.append('stage1/texts/index.json не парсится как JSON')
+        return
+    ok = [s for s in srcs if s.get('ok')]
+    need = int(lim.get('verbatim_sources_min') or 3)
+    INFO.append('тексты источников: скачано %d из %d' % (len(ok), len(srcs)))
+    if len(ok) < need:
         problems.append(
-            '%s: стилевой гейт FAIL — %s. Значит, жанровый профиль ars-style НЕ был '
-            'применён при письме (отчёт: %s). Переписывать по профилю сейчас, '
-            'а не откладывать на Stage 4.75' % (rel, detail, out_rel))
+            'stage1/texts: полный текст есть у %d источников при минимуме %d. Добрать открытые '
+            'источники (КиберЛенинка, тексты НПА) или сохранить текст страницы через браузер '
+            'и добавить: fetch_sources.py <run_dir> --add <n> <файл.txt>' % (len(ok), need))
+
+
+def check_verbatim(run_dir, rel, out_rel, problems, lim):
+    if not _verbatim_on(lim):
+        INFO.append('ВНИМАНИЕ: в state.json нет limits.verbatim_min/verbatim_max — '
+                    'правило дословности в этом прогоне не проверяется')
+        return
+    src = os.path.join(run_dir, rel)
+    if not os.path.isfile(src):
+        return
+    texts = os.path.join(run_dir, 'stage1', 'texts')
+    tool = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'verbatim_share.py')
+    lo = float(lim['verbatim_min']) * 100
+    hi = float(lim.get('verbatim_max') or 1.0) * 100
+    out = os.path.join(run_dir, out_rel)
+    os.makedirs(os.path.dirname(out), exist_ok=True)
+    try:
+        spans = os.path.join(os.path.dirname(out), 'verbatim_spans_found.txt')
+        r = subprocess.run([sys.executable, tool, src, texts, '--min', str(lo), '--max', str(hi),
+                            '--json', out, '--spans', spans], capture_output=True, text=True,
+                           encoding='utf-8', errors='replace', timeout=600)
+    except (OSError, subprocess.SubprocessError) as exc:
+        problems.append('проверка дословности не запустилась: %s' % exc)
+        return
+    lines = [ln.strip() for ln in (r.stdout or '').split('\n') if ln.strip()]
+    head = next((ln for ln in lines if ln.startswith('ДОСЛОВНО')), None)
+    if head:
+        INFO.append('%s: %s' % (rel, head))
+    if r.returncode == 2:
+        problems.append('%s: дословность мерить нечем — %s' % (rel, lines[0] if lines else '?'))
+    elif r.returncode != 0:
+        fails = [ln[6:] for ln in lines if ln.startswith('FAIL')]
+        problems.append('%s: правило дословности FAIL — %s (куски и их источники: %s)'
+                        % (rel, '; '.join(fails) or 'см. отчёт', out_rel))
+
+
+def check_new_run_keys(run_dir, problems, lim):
+    """Прогон, заведённый после 13.10.2026, обязан нести жанр и коридор дословности."""
+    if not _verbatim_on(lim):
+        problems.append('state.json: нет limits.verbatim_min / verbatim_max (правило дословности '
+                        '10–20 %%, Step 1 Orchestrator Workflow) — задать до Stage 1')
+    lang = (lim.get('language') or '').lower()
+    if lang in ('ru', 'rus', 'russian') and not lim.get('genre'):
+        problems.append('state.json: нет limits.genre (статья / вкр / курсовая / кандидатская) — '
+                        'без жанра стилевой гейт не включит оси v3')
 
 
 def validate(run_dir, stage):
@@ -311,17 +418,25 @@ def validate(run_dir, stage):
     check_files(run_dir, stage, problems)
     lim = load_limits(run_dir)
     if stage == '1':
+        check_new_run_keys(run_dir, problems, lim)
         check_sources(run_dir, problems, lim)
+        check_texts(run_dir, problems, lim)
     if stage == '2':
         check_volume(run_dir, 'stage2/paper_draft.md', problems, lim)
+        # сначала дословность: найденные куски исключаются из замера стиля
+        check_verbatim(run_dir, 'stage2/paper_draft.md', 'stage2/verbatim.json', problems, lim)
         check_style_scan(run_dir, 'stage2/paper_draft.md',
                          'stage2/style_scan.json', problems, lim)
     if stage == '4':
         check_volume(run_dir, 'stage4/paper_revised.md', problems, lim)
+        check_verbatim(run_dir, 'stage4/paper_revised.md', 'stage4/verbatim.json', problems, lim)
     if stage == "4'":
         check_volume(run_dir, 'stage4p/paper_revised2.md', problems, lim)
+        check_verbatim(run_dir, 'stage4p/paper_revised2.md', 'stage4p/verbatim.json',
+                       problems, lim)
     if stage == '5':
         check_volume(run_dir, 'stage5/final_paper.md', problems, lim)
+        check_verbatim(run_dir, 'stage5/final_paper.md', 'stage5/verbatim.json', problems, lim)
     if stage == '2.5':
         check_verdict(run_dir, 'stage2_5/integrity_report.md', problems,
                       'проверка целостности (Stage 2.5)')
@@ -339,6 +454,10 @@ def validate(run_dir, stage):
                       'venue-гейт целевого журнала (Stage 4.6)')
     if stage == '4.75':
         check_destyle(run_dir, problems)
+        check_verbatim(run_dir, 'stage4_75/paper_destyled.md', 'stage4_75/verbatim.json',
+                       problems, lim)
+        check_style_scan(run_dir, 'stage4_75/paper_destyled.md',
+                         'stage4_75/style_scan_v3.json', problems, lim)
         check_verdict(run_dir, 'stage4_75/destyle_report.md', problems,
                       'дестилизация (Stage 4.75)')
     return problems
@@ -352,9 +471,15 @@ def ledger(run_dir):
     Тяжёлые проверки не запускает — только наличие и размер артефактов."""
     print('\n=== ЛЕДЖЕР ПРОГОНА: %s ===\n' % run_dir)
     lim = load_limits(run_dir)
-    print('  язык: %s | источники %s-%s | цель объёма: %s знаков (±%d%%)\n'
-          % (lim.get('language') or 'не задан', lim['sources_min'], lim['sources_max'],
+    print('  язык: %s | жанр: %s | источники %s-%s | цель объёма: %s знаков (±%d%%)'
+          % (lim.get('language') or 'не задан', lim.get('genre') or 'не задан',
+             lim['sources_min'], lim['sources_max'],
              lim.get('target_chars') or 'не задана', int(lim['tolerance'] * 100)))
+    if _verbatim_on(lim):
+        print('  дословно из источников: %g–%g %% текста\n'
+              % (float(lim['verbatim_min']) * 100, float(lim.get('verbatim_max') or 1) * 100))
+    else:
+        print('  дословность: не включена (state.json до 13.10.2026)\n')
     last_done = None
     for st in STAGE_ORDER:
         req = REQUIRED[st]
@@ -416,9 +541,12 @@ def main():
 
     all_problems = []
     for st in stages:
+        del INFO[:]
         probs = validate(args.run_dir, st)
         tag = 'PASS' if not probs else 'FAIL'
         print(f'\n=== Stage {st}: {tag} ===')
+        for line in INFO:
+            print(f'  {line}')
         for p in probs:
             print(f'  FAIL  {p}')
         all_problems += probs

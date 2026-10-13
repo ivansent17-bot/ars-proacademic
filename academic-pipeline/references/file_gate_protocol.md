@@ -36,7 +36,7 @@
 
 | Stage | Папка | Обязательные файлы | Кто произвёл / кто скопировал |
 |---|---|---|---|
-| 1 RESEARCH | `stage1/` | `rq_brief.md`, `bibliography.md`, `synthesis.md` | deep-research агенты → оркестратор |
+| 1 RESEARCH | `stage1/` | `rq_brief.md`, `bibliography.md`, `synthesis.md`; `texts/*.txt` + `texts/index.json` (полные тексты источников, ≥ `verbatim_sources_min`) | deep-research агенты → оркестратор; тексты качает оркестратор (`fetch_sources.py`) |
 | 2 WRITE | `stage2/` | `paper_config.md`, `outline.md`, `paper_draft.md` | academic-paper агенты (phase-каталоги) → оркестратор |
 | 2.5 INTEGRITY | `stage2_5/` | `integrity_report.md` (явный вердикт PASS/FAIL) | integrity_verification_agent (Bucket C, напрямую) |
 | 3 REVIEW | `stage3/` | `review_eic.md`, `review_methodology.md`, `review_domain.md`, `review_perspective.md`, `review_devils_advocate.md`, `editorial_decision.md`, `revision_roadmap.md` | 5 субагентов → `phase1_<slug>/`; синтезатор → `phase2_<slug>/`; оркестратор копирует |
@@ -54,7 +54,8 @@
 ```json
 {"slug": "...", "language": "ru",
  "limits": {"sources_min": 12, "sources_max": 20, "target_chars": 24000,
-            "tolerance": 0.10, "style_gate": true},
+            "tolerance": 0.10, "style_gate": true, "genre": "статья",
+            "verbatim_min": 0.10, "verbatim_max": 0.20},
  "stages": []}
 ```
 
@@ -63,6 +64,8 @@
 | `limits.sources_max` / `sources_min` | Stage 1: число записей в `stage1/bibliography.md` |
 | `limits.target_chars` + `tolerance` | Stage 2/4/4'/5: объём черновика и всех последующих версий; превышение — такой же FAIL, как недобор |
 | `language: "ru"` + `style_gate` | Stage 2: `scan_axes.py --gate` по `stage2/paper_draft.md`; отчёт кладётся в `stage2/style_scan.json`. FAIL = жанровый профиль `ars-style` не был применён при письме |
+| `genre` | Stage 2 и 4.75: включает оси v3 стилевого гейта (`--genre`): ДЕТЕКТОР (опора без значков ссылок ≥ 33 %, род. цепочки ≤ 12 на 1000 слов, триады ≤ 4,5, «не только… но и» ≤ 1, клише 0) и ПОЛ против стерилизации (CV ≥ 0,42, короче 12 слов ≥ 12 %, подряд одного класса ≤ 12, связки ≥ 2, «;» ≥ 1, скобки ≥ 2 на 1000 слов). Жанровые коридоры печатаются как цель, не блокируют. Пороги — `ru-academic-destyle/scripts/axes_v3.json`. На Stage 1 отсутствие жанра у ru-работы = FAIL |
+| `verbatim_min` / `verbatim_max` | Stage 1: тексты источников скачаны (`stage1/texts/index.json`, полных текстов ≥ `verbatim_sources_min`, по умолчанию 3). Stage 2/4/4'/4.75/5: `verbatim_share.py` — доля дословных кусков источников в коридоре и у каждого куска ссылка на свой источник в том же абзаце; отчёт `stageN/verbatim.json`, строка «ДОСЛОВНО ИЗ ИСТОЧНИКОВ: X %» печатается в выводе валидатора. На Stage 1 отсутствие ключей = FAIL; в прогонах, заведённых до 13.10.2026, на прочих стадиях — предупреждение |
 
 Стилевой гейт на Stage 2 — ранняя диагностика: без него непринятый профиль всплывает
 только на Stage 4.75, после нескольких часов работы. Скрипт ищется в
@@ -100,4 +103,4 @@ Stage 5 не начинается без `formatting_spec.md`. Язык(и) ан
 
 ## Stage 4.75 DESTYLE (ru) — интеграционный контракт
 
-Вход: файл работы после Stage 4.6 (или 4.5, если venue-стадия пропущена) + `terms.txt` (термины из Paper Configuration Record). Исполнение: скилл `ru-academic-destyle`, режим «Пайплайн» (его `references/modes.md` §5), из оркестратора/основной сессии. Гейты: `scan_axes.py --gate` (пороги, ≤3 итераций) и `check_invariants.py` (числа/цитаты/сноски/заголовки/термины) — оба блокирующие. Выход: 5 файлов в `stage4_75/` (см. карту). После PASS текст ЗАМОРОЖЕН — дальше только конвертация формата.
+Вход: файл работы после Stage 4.6 (или 4.5, если venue-стадия пропущена) + `terms.txt` (термины из Paper Configuration Record). Исполнение: скилл `ru-academic-destyle`, режим «Пайплайн» (его `references/modes.md` §5), из оркестратора/основной сессии. Гейты: `scan_axes.py --gate --genre <жанр>` (пороги + оси v3, ≤3 итераций) и `check_invariants.py --spans stage4_75/verbatim_spans.txt` (числа/цитаты/сноски/заголовки/термины/дословные куски источников) — оба блокирующие. Валидатор Stage 4.75 сам повторяет стилевой гейт v3 и замер дословности по `paper_destyled.md`. Дословные куски источников во всех стилевых замерах исключаются (`scan_axes.py --exclude-spans`): это чужой текст со своей пунктуацией, править его нельзя. Выход: 5 файлов в `stage4_75/` (см. карту). После PASS текст ЗАМОРОЖЕН — дальше только конвертация формата.

@@ -270,10 +270,14 @@ pipeline_orchestrator_agent analyzes the user's input:
    state.json ОБЯЗАН содержать (иначе гейты работают вслепую):
      {"slug": "...", "language": "ru|en|...",
       "limits": {"sources_min": 12, "sources_max": 20,
-                 "target_chars": <из требований>, "tolerance": 0.10},
+                 "target_chars": <из требований>, "tolerance": 0.10,
+                 "genre": "статья|вкр|курсовая|кандидатская",
+                 "verbatim_min": 0.10, "verbatim_max": 0.20},
       "stages": []}
-   Эти числа проверяются блокирующе: Stage 1 — количество источников,
-   Stage 2/4/4'/5 — объём текста, Stage 2 (ru) — стилевой гейт scan_axes.py.
+   Эти числа проверяются блокирующе: Stage 1 — количество источников, жанр, коридор
+   дословности и скачанные тексты источников; Stage 2/4/4'/5 — объём текста и доля
+   дословного; Stage 2 и 4.75 (ru) — стилевой гейт scan_axes.py с осями v3 по жанру.
+   Жанр вне списка (реферат, эссе, отчёт) — ближайший: «курсовая».
 ```
 
 ### Возобновление в новом чате (Resume Protocol) ⚠️ IRON RULE
@@ -330,7 +334,7 @@ After user confirmation:
 
 1. Pass the previous stage's deliverables as input to the next stage
 2. Trigger handoff protocol (defined in each skill's SKILL.md):
-   - Stage 1  --> 2: deep-research handoff (RQ Brief + Methodology Blueprint + Bibliography + Synthesis)
+   - Stage 1  --> 2: deep-research handoff (RQ Brief + Methodology Blueprint + Bibliography + Synthesis) + path to `stage1/texts/` (full source texts for the verbatim rule — see «Дословность»)
    - #672 cargo on every transition: exact builder-produced `preregistration-artifact/1.0` receipt and its named companion when provided; validate and carry byte-for-byte
    - **INJECTION IRON RULE: when dispatching ANY writing/revising subagent (Stage 2 draft, Stage 4/4' revision, Stage 5 formatting), the orchestrator pastes VERBATIM into the subagent prompt: (a) `~/.claude/ars-style/INJECT_STYLE_BLOCK.md` for Russian papers, and (b) `~/.claude/ars-review/<venue>/INJECT_VENUE_BLOCK.md` when venue_profile is set. Never paraphrase these blocks — copy the file contents. Subagents have a self-fetch fallback, but the orchestrator not pasting them is a protocol violation.**
    - Stage 2  --> 2.5: Pass complete paper to integrity_verification_agent
@@ -414,7 +418,7 @@ The recurring failure mode of prompt-only orchestration is *simulated* execution
 
 1. **Стадии не заменяются импровизацией.** Каждая стадия выполняется РОВНО так, как описана в этом скилле, суб-агентами, которых она предписывает. Особо Stage 3 (панель из 5 рецензентов) и Stage 2.5/4.5 (integrity): их ЗАПРЕЩЕНО выполнять «своими силами» в основном контексте — только отдельные clean-context суб-агенты, каждый со своим файлом-отчётом, затем validate_stage_gate. «Я сам быстро отрецензирую/проверю» = провал стадии, даже если результат выглядит разумно. Стадию невозможно выполнить как предписано → СТОП и доложить пользователю; тихое упрощение запрещено.
 2. **Модельная политика — через штатный `ARS_MODEL_TIERING` (upstream #517), НЕ вручную.** Ручное понижение агентов ЗАПРЕЩЕНО. Канон — `shared/model_tiering.md` + `scripts/model_tiering_manifest.json`: 26 агентов judgment-type идут ТОЛЬКО на модели сессии, 13 execution-type понижаются ровно на одну ступень с полом Opus-class. **Sonnet-класс не допускается ни для одного агента ARS ни при каких настройках.** Агенты Stage 1 (`research_question`, `research_architect`, `synthesis`, `source_verification`, `risk_of_bias`, `editor_in_chief`, `literature_strategist`) — judgment-type: понижать их запрещено, именно они формируют доказательную базу, и никакой гейт 2.5/4.5 потом не починит плохие источники. Переключатель выставляется в окружении: `ARS_MODEL_TIERING=economy` для сессии на фронтир-модели, `quality-boost` для сессии ниже фронтира (judgment-агенты поднимаются до фронтира на гейтах), не задан — всё на модели сессии (дефолт, безопасен). **Соразмерность research:** для статьи достаточно 12–20 добротных источников и ОДНОЙ волны разведчиков; вторая волна — только если Stage 2.5 нашла дыры в базе. Не раскапывать тему «до дна» и не плодить итерации ресерча без явного запроса пользователя. **Соразмерность режима:** полный 11-стадийный прогон — не дефолт. Для короткой статьи под знакомый журнал выбирать `academic-paper` + venue-гейт, а не весь пайплайн; полный прогон — когда нужны обе волны рецензирования.
-3. **Пользователю — только финальный .docx.** Все промежуточные файлы (черновики, рецензии, планы правок, integrity-отчёты, все *.md в ars_run/) — служебные артефакты: обязательны для гейтов, но пользователю их НЕ отправлять, НЕ прикладывать и НЕ перечислять списком. Финальное сообщение = путь к одному .docx + короткий текстовый итог с фактическими вердиктами гейтов. В Cowork промежуточные файлы держать в рабочей папке ars_run/, в outputs выкладывать только финальный .docx.
+3. **Пользователю — только финальный .docx.** Все промежуточные файлы (черновики, рецензии, планы правок, integrity-отчёты, все *.md в ars_run/) — служебные артефакты: обязательны для гейтов, но пользователю их НЕ отправлять, НЕ прикладывать и НЕ перечислять списком. Финальное сообщение = путь к одному .docx + короткий текстовый итог с фактическими вердиктами гейтов и строкой «Дословно из источников: X % текста» (берётся из вывода валидатора Stage 5, не пересчитывается на глаз). В Cowork промежуточные файлы держать в рабочей папке ars_run/, в outputs выкладывать только финальный .docx.
 4. **Данные автора — всегда плейсхолдеры, вопросов не задавать.** ФИО/организация/e-mail/ORCID/соавторы/научрук НИКОГДА не запрашиваются (ни на intake, ни на Stage 5/6): сразу ставить `[Фамилия И. О.]`, `[организация]`, `[e-mail]`; заполняет пользователь. Intake-вопрос про соавторов (Step 9 academic-paper) отключён тем же оверрайдом.
 
 5. **Бюджет прогона фиксируется до старта и проверяется машиной.** Объём в знаках, потолок и минимум источников
@@ -427,6 +431,22 @@ The recurring failure mode of prompt-only orchestration is *simulated* execution
    запрещён — для уверенности существуют артефакты и вердикты, а не второй проход. Продолжение в новом чате —
    через `--ledger` (Resume Protocol выше), а не пересказом контекста. Не устраивает результат по существу —
    это явный возврат на стадию по решению пользователя, с записью причины в `state.json`.
+
+7. **Дословность (Иван, 13.10.2026).** В любой работе 10–20 % основного текста — куски источников
+   СЛОВО В СЛОВО (в кавычках или без), каждый со ссылкой на СВОЙ источник в том же абзаце.
+   Цель — небольшой процент заимствований в отчёте Антиплагиата, как у живой работы на источниках;
+   писатель целится в 10–15 %. Порядок:
+   - Stage 1: после `bibliography.md` оркестратор сам скачивает тексты —
+     `python3 "${CLAUDE_PLUGIN_ROOT}/academic-pipeline/scripts/fetch_sources.py" <run_dir>` →
+     `stage1/texts/*.txt` + `index.json`. Предпочитать открытые источники (КиберЛенинка, тексты НПА,
+     открытые журналы): заимствование видно в отчёте, только если источник есть в базе системы.
+     Страница не отдаётся скрипту — сохранить её текст из браузера (`get_page_text`) в .txt и
+     `--add <n> <файл>`. **WebFetch для дословных кусков запрещён**: его пересказчик выдумывает
+     «цитаты», которых на странице нет.
+   - Дословно цитировать можно ТОЛЬКО из `stage1/texts/`. Источник без текста — только пересказ.
+   - Валидатор меряет долю (`verbatim_share.py`) на Stage 2/4/4'/4.75/5 и валит при выходе из
+     коридора или куске без ссылки на свой источник.
+   - Stage 4.75: дословные куски неприкосновенны, как цитаты (см. протокол 4.75).
 
 ---
 
@@ -453,10 +473,10 @@ Stage 5 MUST NOT start without `formatting_spec.md`. The abstract/annotation lan
 
 For papers whose main text is Russian, after Stage 4.5 PASS the orchestrator dispatches the standalone `ru-academic-destyle` skill in **pipeline mode** (its `references/modes.md` §5):
 
-1. Orchestrator prepares `terms.txt` (key terminology from the Paper Configuration Record + glossary).
-2. The skill runs its verifiable cycle: `scan_axes.py --json before.json` → edit → `scan_axes.py --gate --compare` (blocking, ≤3 iterations) → `check_invariants.py` (blocking: numbers, citation markers, footnotes, quotes, headings, terms must survive).
+1. Orchestrator prepares `terms.txt` (key terminology from the Paper Configuration Record + glossary) and the protected verbatim pieces: `verbatim_share.py <input.md> <run_dir>/stage1/texts --spans stage4_75/verbatim_spans.txt`.
+2. The skill runs its verifiable cycle: `scan_axes.py --json before.json --genre <limits.genre> --exclude-spans stage4_75/verbatim_spans.txt` → edit → `scan_axes.py --gate --genre <limits.genre> --exclude-spans stage4_75/verbatim_spans.txt --compare` (blocking, ≤3 iterations; axes v3 included; verbatim source pieces are someone else's text — excluded from the style measurement and never edited) → `check_invariants.py --spans stage4_75/verbatim_spans.txt` (blocking: numbers, citation markers, footnotes, quotes, headings, terms and every verbatim source piece must survive).
 3. Deliverables in `ars_run/<slug>/stage4_75/`: `paper_destyled.md`, `before.json`, `after.json`, `invariants.json`, `destyle_report.md`.
-4. `validate_stage_gate.py --stage 4.75` must PASS.
+4. `validate_stage_gate.py --stage 4.75` must PASS — it re-runs the style gate with axes v3 on `paper_destyled.md` and re-measures the verbatim share itself, regardless of what the skill reported.
 5. ⚠️ **IRON RULE**: after Stage 4.75 the substantive text is FROZEN. Stage 5 performs format conversion only; any later content change reopens the pipeline at Stage 4.5.
 
 Non-Russian papers: stage is skipped; `state.json` records `{"stage": "4.75", "status": "skipped", "reason": "non-ru"}`. The destyle scripts run from the orchestrator/main session (unfenced) — never from a Bucket A agent.
@@ -683,7 +703,8 @@ Explicit prohibitions to prevent common failure modes:
 | **Mandatory checkpoint** | **User confirmation required after each stage completion** |
 | **Mandatory integrity check** | **Stage 2.5 and 4.5 always run; continuation past a non-PASS result requires an explicit, recorded user decision** |
 | **Mandatory file gate (v4.1)** | **`validate_stage_gate.py` PASS required for every stage transition; validator stdout shown to the user verbatim** |
-| **Mandatory destyle gates (v4.1, ru)** | **Stage 4.75 `scan_axes.py --gate` + `check_invariants.py` must PASS for Russian papers** |
+| **Mandatory destyle gates (v4.1, ru)** | **Stage 4.75 `scan_axes.py --gate --genre` (axes v3) + `check_invariants.py --spans` must PASS for Russian papers** |
+| **Verbatim rule (v4.3)** | **10–20 % of the main text is source text word for word, each piece cited to its own source; measured by `verbatim_share.py` at Stage 2/4/4'/4.75/5 and reported to the user** |
 | **Ask-first formatting (v4.1)** | **No standard assumed; методичка/GOST/journal confirmed and recorded in `stage5/formatting_spec.md`** |
 | **Mandatory failure mode checklist** (v3.2) | **Stage 2.5 and 4.5 must run the 7-mode AI research failure checklist; suspected failures block; overrides require user reasoning** |
 | No overstepping | ⚠️ IRON RULE: Orchestrator does not perform substantive research/writing/reviewing, only dispatching |

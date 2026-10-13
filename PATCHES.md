@@ -1,6 +1,6 @@
 # ProScience fork — academic-research-skills
 
-**Версия форка:** 4.2.5
+**Версия форка:** 4.3.0
 **База:** upstream `v3.21.0` (Cheng-I Wu, CC-BY-NC-4.0, лицензия и авторство сохранены)
 **Апстрим:** https://github.com/Imbad0202/academic-research-skills
 
@@ -25,6 +25,7 @@ git rebase v3.22.0 ps          # подставить новый тег
 | `academic-pipeline/SKILL.md` | Stage 4.6 VENUE (блокирующий гейт целевого журнала); Stage 4.75 DESTYLE (ru); file-gate enforcement (`ars_run/<slug>/`, `state.json`, валидатор); INJECTION IRON RULE (дословная вставка style/venue-блоков в пишущих суб-агентов); Execution Discipline; ask-first formatting intake |
 | `academic-pipeline/references/file_gate_protocol.md` | карта артефактов по стадиям + контракт Stage 4.6 |
 | `academic-pipeline/scripts/validate_stage_gate.py` | блокирующий валидатор стадий: `4.6` + `ВЕРДИКТ ГЕЙТА: PASS`; **потолок источников** (Stage 1), **бюджет объёма** ±10 % (Stage 2/4/4'/5), **ранний стилевой гейт** `scan_axes.py --gate` по черновику Stage 2 для ru, режим `--ledger` для входа в новом чате |
+| дословность и оси v3 (4.3.0) | `scripts/fetch_sources.py` качает полные тексты источников Stage 1 в `stage1/texts/` (+ `index.json`); `scripts/verbatim_share.py` меряет долю дословных кусков (коридор `limits.verbatim_min/max`, по умолчанию 10–20 %) и ссылку каждого куска на свой источник; валидатор требует на Stage 1 жанр, коридор и ≥ 3 скачанных текста, меряет долю на Stage 2/4/4'/4.75/5 и сам повторяет стилевой гейт с `--genre` (оси v3) на Stage 4.75; `draft_writer_agent.md` и Execution Discipline §7 — правило для писателя и строка «Дословно из источников: X %» в итоге пользователю |
 | `academic-paper/SKILL.md` | ГОСТ Р 7.0.100-2018 в списке форматов; ask-first formatting intake; настраиваемый языковой набор аннотации вместо зашитого zh-TW+EN |
 | `academic-paper/agents/intake_agent.md` | Step 9 (вопросы про авторов отключены — всегда плейсхолдеры), Step 10 (style_profile задан файлами `ars-style/`), Step 10b (детекция venue → venue_profile) |
 | `academic-paper/agents/draft_writer_agent.md` | жёсткое style+venue enforcement с self-fetch fallback |
